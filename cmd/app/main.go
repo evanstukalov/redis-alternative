@@ -25,7 +25,11 @@ func main() {
 		Port:             *port,
 		MasterReplId:     "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb",
 		MasterReplOffset: 0,
+		Replicaof:        *replicaOf,
 	}
+
+	fmt.Println(config)
+	fmt.Println(*replicaOf)
 
 	storeObj := store.NewStore()
 	expiredCollector := store.NewExpiredCollector(storeObj)
@@ -57,11 +61,12 @@ func main() {
 			log.Fatalln("Error connecting to master: ", err)
 		}
 
-		if err = slave.Handshakes(masterConn, config); err != nil {
+		reader, err := slave.Handshakes(masterConn, config)
+		if err != nil {
 			log.Fatalln("There is was error in handshakes with master : ", err)
 		}
 
-		go slave.ReadFromConnection(ctx, masterConn, config)
+		go slave.ReadFromConnection(ctx, masterConn, reader, config)
 	}
 
 	go master.AcceptConnections(l, connChan, errChan)

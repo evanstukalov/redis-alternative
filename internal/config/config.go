@@ -5,4 +5,5 @@ type Config struct {
 	Role             string
 	MasterReplId     string
 	MasterReplOffset int
+	Replicaof        string
 }

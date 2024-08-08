@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"io"
+	"log"
 	"net"
 	"strings"
 
@@ -22,7 +24,17 @@ func (m MasterInfo) Address() string {
 }
 
 func masterInfoFromParam(replicaOf string) MasterInfo {
-	data := strings.Split(replicaOf, " ")
+	var delim string
+
+	if strings.Contains(replicaOf, ":") {
+		delim = ":"
+	} else if strings.Contains(replicaOf, " ") {
+		delim = " "
+	} else {
+		log.Fatalln("Error parsing masterInfo")
+	}
+
+	data := strings.Split(replicaOf, delim)
 	return MasterInfo{
 		Host: data[0],
 		Port: data[1],
@@ -33,7 +45,6 @@ func sendMessage(conn net.Conn, message string) error {
 	if _, err := conn.Write([]byte(message)); err != nil {
 		return err
 	}
-	readAnswer(conn)
 	return nil
 }
 
@@ -48,6 +59,15 @@ func readAnswer(
 	fmt.Println(message)
 }
 
+func readNBytes(reader io.Reader, n int) ([]byte, error) {
+	buf := make([]byte, n)
+	_, err := io.ReadFull(reader, buf)
+	if err != nil {
+		return nil, err
+	}
+	return buf, nil
+}
+
 func ConnectMaster(replicaof string, config config.Config) (net.Conn, error) {
 	masterInfo := masterInfoFromParam(replicaof)
 	addr := masterInfo.Address()
@@ -60,38 +80,66 @@ func ConnectMaster(replicaof string, config config.Config) (net.Conn, error) {
 	return conn, nil
 }
 
-func Handshakes(conn net.Conn, config config.Config) error {
+func Handshakes(conn net.Conn, config config.Config) (*bufio.Reader, error) {
 	if err := sendMessage(conn, "*1\r\n$4\r\nPING\r\n"); err != nil {
-		return err
+		return nil, err
 	}
+	readAnswer(conn)
 	if err := sendMessage(
 		conn,
 		fmt.Sprintf("*3\r\n$8\r\nREPLCONF\r\n$14\r\nlistening-port\r\n$4\r\n%d\r\n", config.Port),
 	); err != nil {
-		return err
+		return nil, err
 	}
-	if err := sendMessage(conn, "*3\r\n$8\r\nREPLCONF\r\n$4\r\ncapa\r\n$6\r\npsync2\r\n"); err != nil {
-		return err
-	}
-	if err := sendMessage(conn, "*3\r\n$5\r\nPSYNC\r\n$1\r\n?\r\n$2\r\n-1\r\n"); err != nil {
-		return err
-	}
-	fmt.Println("Waiting for response after PSYNC")
 	readAnswer(conn)
+	if err := sendMessage(conn, "*3\r\n$8\r\nREPLCONF\r\n$4\r\ncapa\r\n$6\r\npsync2\r\n"); err != nil {
+		return nil, err
+	}
+	readAnswer(conn)
+	if err := sendMessage(conn, "*3\r\n$5\r\nPSYNC\r\n$1\r\n?\r\n$2\r\n-1\r\n"); err != nil {
+		return nil, err
+	}
+	reader := bufio.NewReader(conn)
+	line, err := reader.ReadBytes('\n')
+	if err != nil {
+		return nil, err
+	}
+	fmt.Println(string(line))
 
+	line, err = reader.ReadBytes('\n')
+	if err != nil {
+		return nil, err
+	}
+	fmt.Println(string(line))
+
+	var dataLen int
+	_, err = fmt.Sscanf(string(line), "$%d\r\n", &dataLen)
+	if err != nil {
+		return nil, err
+	}
+
+	data, err := readNBytes(reader, dataLen)
+	if err != nil {
+		return nil, err
+	}
+
+	fmt.Println("Received RDB:", string(data))
 	fmt.Println("Handshakes with master is over")
 
-	return nil
+	return reader, nil
 }
 
-func ReadFromConnection(ctx context.Context, conn net.Conn, config config.Config) {
+func ReadFromConnection(
+	ctx context.Context,
+	conn net.Conn,
+	reader *bufio.Reader,
+	config config.Config,
+) {
 	fmt.Println("Starting consuming commands from master")
 	defer conn.Close()
 
 	for {
-		r := bufio.NewReader(conn)
-
-		args, err := redis.UnpackInput(r)
+		args, err := redis.UnpackInput(reader)
 		if err != nil {
 			break
 		}
@@ -102,7 +150,7 @@ func ReadFromConnection(ctx context.Context, conn net.Conn, config config.Config
 			break
 		}
 
-		HandleCommand(ctx, conn, config, args)
+		go HandleCommand(ctx, conn, config, args)
 	}
 }
 
