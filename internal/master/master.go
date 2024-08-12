@@ -53,7 +53,7 @@ func HandleCommand(ctx context.Context, conn net.Conn, config config.Config, arg
 		return
 	}
 
-	cmd.Execute(ctx, conn, config, args)
+	go cmd.Execute(ctx, conn, config, args)
 
 	for _, command := range commands.Propagated {
 		if command == args[0] {

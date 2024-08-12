@@ -15,7 +15,7 @@ import (
 	"github.com/codecrafters-io/redis-starter-go/internal/store"
 )
 
-var Propagated = [2]string{"SET", "DEL"}
+var Propagated = [3]string{"SET", "DEL"}
 
 type Command interface {
 	Execute(ctx context.Context, conn net.Conn, config config.Config, args []string)
@@ -153,7 +153,21 @@ func (c *ReplConfCommand) Execute(
 	config config.Config,
 	args []string,
 ) {
-	conn.Write([]byte("+OK\r\n"))
+	switch config.Role {
+	case "master":
+		switch args[1] {
+		case "ACK":
+			fmt.Println("REPL ACK ", args[2])
+		case "capa":
+			conn.Write([]byte("+OK\r\n"))
+		case "listening-port":
+			conn.Write([]byte("+OK\r\n"))
+		}
+	case "slave":
+		if args[1] == "GETACK" && args[2] == "*" {
+			conn.Write([]byte("*3\r\n$8\r\nREPLCONF\r\n$3\r\nACK\r\n$1\r\n0\r\n"))
+		}
+	}
 }
 
 type PsyncCommand struct{}

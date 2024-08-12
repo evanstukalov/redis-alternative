@@ -92,7 +92,7 @@ func Handshakes(conn net.Conn, config config.Config) (*bufio.Reader, error) {
 		return nil, err
 	}
 	readAnswer(conn)
-	if err := sendMessage(conn, "*3\r\n$8\r\nREPLCONF\r\n$4\r\ncapa\r\n$6\r\npsync2\r\n"); err != nil {
+	if err := sendMessage(conn, "*5\r\n$8\r\nREPLCONF\r\n$4\r\ncapa\r\n$3\r\neof\r\n$4\r\ncapa\r\n$6\r\npsync2\r\n"); err != nil {
 		return nil, err
 	}
 	readAnswer(conn)

@@ -1,6 +1,7 @@
 package clients
 
 import (
+	"fmt"
 	"net"
 	"sync"
 )
@@ -19,6 +20,8 @@ func NewClients() *Clients {
 func (cl *Clients) Set(client net.Conn) {
 	cl.Mutex.Lock()
 	defer cl.Mutex.Unlock()
+
+	fmt.Println("New client has been connected! ", client.RemoteAddr().String())
 
 	cl.Clients[client] = struct{}{}
 }
