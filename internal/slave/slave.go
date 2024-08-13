@@ -51,12 +51,12 @@ func sendMessage(conn net.Conn, message string) error {
 func readAnswer(
 	conn net.Conn,
 ) {
-	message, err := bufio.NewReader(conn).ReadString('\n')
+	_, err := bufio.NewReader(conn).ReadString('\n')
 	if err != nil {
 		fmt.Println("Error reading from connection: ", err.Error())
 		return
 	}
-	fmt.Println(message)
+	// fmt.Println(message)
 }
 
 func readNBytes(reader io.Reader, n int) ([]byte, error) {
@@ -104,13 +104,11 @@ func Handshakes(conn net.Conn, config config.Config) (*bufio.Reader, error) {
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println(string(line))
 
 	line, err = reader.ReadBytes('\n')
 	if err != nil {
 		return nil, err
 	}
-	fmt.Println(string(line))
 
 	var dataLen int
 	_, err = fmt.Sscanf(string(line), "$%d\r\n", &dataLen)
@@ -118,13 +116,12 @@ func Handshakes(conn net.Conn, config config.Config) (*bufio.Reader, error) {
 		return nil, err
 	}
 
-	data, err := readNBytes(reader, dataLen)
+	_, err = readNBytes(reader, dataLen)
 	if err != nil {
 		return nil, err
 	}
 
-	fmt.Println("Received RDB:", string(data))
-	fmt.Println("Handshakes with master is over")
+	// fmt.Println("Received RDB:", string(data))
 
 	return reader, nil
 }
@@ -135,11 +132,10 @@ func ReadFromConnection(
 	reader *bufio.Reader,
 	config config.Config,
 ) {
-	fmt.Println("Starting consuming commands from master")
 	defer conn.Close()
 
 	for {
-		args, err := redis.UnpackInput(reader)
+		args, offset, err := redis.UnpackInput(reader)
 		if err != nil {
 			break
 		}
@@ -150,16 +146,25 @@ func ReadFromConnection(
 			break
 		}
 
-		go HandleCommand(ctx, conn, config, args)
+		go HandleCommand(ctx, conn, config, args, offset)
 	}
 }
 
-func HandleCommand(ctx context.Context, conn net.Conn, config config.Config, args []string) {
+func HandleCommand(
+	ctx context.Context,
+	conn net.Conn,
+	config config.Config,
+	args []string,
+	offset int,
+) {
 	cmd, exists := commands.Commands[strings.ToUpper(args[0])]
 	if !exists {
 		conn.Write([]byte("-Error\r\n"))
 		return
 	}
-
+	fmt.Printf("Offset new command: %d\r\n", offset)
 	cmd.Execute(ctx, conn, config, args)
+	config.Slave.Offset.Add(int64(offset))
+
+	fmt.Printf("Total offset after command %d\r\n", config.Slave.Offset.Load())
 }

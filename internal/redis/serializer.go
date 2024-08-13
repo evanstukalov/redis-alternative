@@ -31,20 +31,22 @@ func parseLen(data []byte) (int, error) {
 	return strconv.Atoi(n)
 }
 
-func UnpackInput(r *bufio.Reader) ([]string, error) {
+func UnpackInput(r *bufio.Reader) ([]string, int, error) {
 	args := make([]string, 0, 64)
+	totalBytesRead := 0
 
 	firstLine, err := r.ReadBytes('\n')
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 
-	var commandLen int
+	totalBytesRead += len(firstLine)
 
+	var commandLen int
 	if firstLine[0] == '*' {
 		commandLen, err = parseLen(firstLine[1:])
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 	}
 
@@ -52,16 +54,17 @@ func UnpackInput(r *bufio.Reader) ([]string, error) {
 
 		line, err := r.ReadBytes('\n')
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
 
-		var argLen int
+		totalBytesRead += len(line)
 
+		var argLen int
 		if line[0] == '$' {
 			argLen, err = parseLen(line[1:])
 			if err != nil {
 				fmt.Println("Error: ", err)
-				return nil, err
+				return nil, 0, err
 			}
 		}
 
@@ -73,12 +76,14 @@ func UnpackInput(r *bufio.Reader) ([]string, error) {
 
 		if _, err = io.ReadFull(r, buf); err != nil {
 			fmt.Println("Error: ", err)
-			return nil, err
+			return nil, 0, err
 		}
+
+		totalBytesRead += len(buf)
 
 		arg := strings.Trim(string(buf), DELIM)
 		args = append(args, arg)
 	}
 
-	return args, nil
+	return args, totalBytesRead, nil
 }

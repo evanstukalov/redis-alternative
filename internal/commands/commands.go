@@ -15,7 +15,7 @@ import (
 	"github.com/codecrafters-io/redis-starter-go/internal/store"
 )
 
-var Propagated = [3]string{"SET", "DEL"}
+var Propagated = [3]string{"SET", "DEL", "PING"}
 
 type Command interface {
 	Execute(ctx context.Context, conn net.Conn, config config.Config, args []string)
@@ -41,7 +41,10 @@ func (c *PingCommand) Execute(
 	config config.Config,
 	args []string,
 ) {
-	conn.Write([]byte("+PONG\r\n"))
+	switch config.Role {
+	case "master":
+		conn.Write([]byte("+PONG\r\n"))
+	}
 }
 
 type SetCommand struct{}
@@ -78,7 +81,8 @@ func (c *SetCommand) Execute(
 		}
 	}
 
-	if config.Role == "master" {
+	switch config.Role {
+	case "master":
 		conn.Write([]byte("+OK\r\n"))
 	}
 }
@@ -125,10 +129,10 @@ func (c *InfoCommand) Execute(
 		role := fmt.Sprintf("role:%s", config.Role)
 		builder.WriteString(fmt.Sprintf("%s\n", role))
 
-		master_replid := fmt.Sprintf("master_replid:%s", config.MasterReplId)
+		master_replid := fmt.Sprintf("master_replid:%s", config.Master.MasterReplId)
 		builder.WriteString(fmt.Sprintf("%s\n", master_replid))
 
-		master_repl_offset := fmt.Sprintf("master_repl_offset:%d", config.MasterReplOffset)
+		master_repl_offset := fmt.Sprintf("master_repl_offset:%d", config.Master.MasterReplOffset)
 		builder.WriteString(
 			fmt.Sprintf("%s\n", master_repl_offset),
 		)
@@ -136,7 +140,6 @@ func (c *InfoCommand) Execute(
 		result := builder.String()
 
 		finalResult := fmt.Sprintf("$%d\r\n%s\r\n", len(result), result)
-		fmt.Println(finalResult)
 
 		conn.Write([]byte(finalResult))
 
@@ -165,7 +168,17 @@ func (c *ReplConfCommand) Execute(
 		}
 	case "slave":
 		if args[1] == "GETACK" && args[2] == "*" {
-			conn.Write([]byte("*3\r\n$8\r\nREPLCONF\r\n$3\r\nACK\r\n$1\r\n0\r\n"))
+			offset := config.Slave.Offset.Load()
+			byteCount := len(strconv.Itoa(int(offset)))
+			conn.Write(
+				[]byte(
+					fmt.Sprintf(
+						"*3\r\n$8\r\nREPLCONF\r\n$3\r\nACK\r\n$%d\r\n%d\r\n",
+						byteCount,
+						offset,
+					),
+				),
+			)
 		}
 	}
 }
@@ -178,7 +191,11 @@ func (c *PsyncCommand) Execute(
 	config config.Config,
 	args []string,
 ) {
-	data := fmt.Sprintf("+FULLRESYNC %s %d\r\n", config.MasterReplId, config.MasterReplOffset)
+	data := fmt.Sprintf(
+		"+FULLRESYNC %s %d\r\n",
+		config.Master.MasterReplId,
+		config.Master.MasterReplOffset,
+	)
 	emptyRDB, _ := hex.DecodeString(redis.EMPTYRDBSTORE)
 	data += fmt.Sprintf("$%d\r\n%s", len(emptyRDB), emptyRDB)
 

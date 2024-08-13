@@ -21,15 +21,9 @@ func main() {
 
 	flag.Parse()
 
-	config := config.Config{
-		Port:             *port,
-		MasterReplId:     "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb",
-		MasterReplOffset: 0,
-		Replicaof:        *replicaOf,
+	cfg := config.Config{
+		Port: *port,
 	}
-
-	fmt.Println(config)
-	fmt.Println(*replicaOf)
 
 	storeObj := store.NewStore()
 	expiredCollector := store.NewExpiredCollector(storeObj)
@@ -40,11 +34,11 @@ func main() {
 	ctx = context.WithValue(ctx, "store", storeObj)
 	ctx = context.WithValue(ctx, "clients", clients)
 
-	address := fmt.Sprintf("0.0.0.0:%d", config.Port)
+	address := fmt.Sprintf("0.0.0.0:%d", cfg.Port)
 
 	l, err := net.Listen("tcp", address)
 	if err != nil {
-		fmt.Println("Failed to bind to port ", config.Port)
+		fmt.Println("Failed to bind to port ", cfg.Port)
 		os.Exit(1)
 	}
 	defer l.Close()
@@ -53,20 +47,27 @@ func main() {
 	errChan := make(chan error)
 
 	if *replicaOf == "" {
-		config.Role = "master"
+		cfg.Role = "master"
+		cfg.Master = &config.Master{
+			MasterReplId:     "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb",
+			MasterReplOffset: 0,
+		}
 	} else {
-		config.Role = "slave"
-		masterConn, err := slave.ConnectMaster(*replicaOf, config)
+		cfg.Role = "slave"
+		cfg.Slave = &config.Slave{
+			Replicaof: *replicaOf,
+		}
+		masterConn, err := slave.ConnectMaster(*replicaOf, cfg)
 		if err != nil {
 			log.Fatalln("Error connecting to master: ", err)
 		}
 
-		reader, err := slave.Handshakes(masterConn, config)
+		reader, err := slave.Handshakes(masterConn, cfg)
 		if err != nil {
 			log.Fatalln("There is was error in handshakes with master : ", err)
 		}
 
-		go slave.ReadFromConnection(ctx, masterConn, reader, config)
+		go slave.ReadFromConnection(ctx, masterConn, reader, cfg)
 	}
 
 	go master.AcceptConnections(l, connChan, errChan)
@@ -76,7 +77,7 @@ func main() {
 		select {
 		case conn := <-connChan:
 
-			go master.ReadFromConnection(ctx, conn, config)
+			go master.ReadFromConnection(ctx, conn, cfg)
 
 		case err := <-errChan:
 			fmt.Println("Error accepting connection", err.Error())

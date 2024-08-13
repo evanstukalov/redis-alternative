@@ -33,7 +33,7 @@ func ReadFromConnection(ctx context.Context, conn net.Conn, config config.Config
 	for {
 		r := bufio.NewReader(conn)
 
-		args, err := redis.UnpackInput(r)
+		args, _, err := redis.UnpackInput(r)
 		if err != nil {
 			break
 		}
@@ -53,11 +53,11 @@ func HandleCommand(ctx context.Context, conn net.Conn, config config.Config, arg
 		return
 	}
 
-	go cmd.Execute(ctx, conn, config, args)
+	cmd.Execute(ctx, conn, config, args)
 
 	for _, command := range commands.Propagated {
 		if command == args[0] {
-			go SendCommandAllClients(ctx, conn, args)
+			SendCommandAllClients(ctx, conn, args)
 		}
 	}
 }
@@ -68,7 +68,7 @@ func SendCommandAllClients(ctx context.Context, conn net.Conn, args []string) {
 		if clients, ok := clientsFromContext.(*clients.Clients); !ok {
 			log.Fatalf("Expected *master.Clients, got %T", clientsFromContext)
 		} else {
-			for clientConn := range clients.Clients {
+			for _, clientConn := range clients.Get() {
 				clientConn.Write([]byte(redis.ConvertToRESP(args)))
 				fmt.Println("Propagated command :", args, conn.RemoteAddr())
 			}
