@@ -18,8 +18,8 @@ func NewClients() *Clients {
 }
 
 func (cl *Clients) Set(client net.Conn) {
-	cl.Mutex.RLock()
-	defer cl.Mutex.RUnlock()
+	cl.Mutex.Lock()
+	defer cl.Mutex.Unlock()
 
 	fmt.Println("New client has been connected! ", client.RemoteAddr().String())
 
@@ -27,8 +27,8 @@ func (cl *Clients) Set(client net.Conn) {
 }
 
 func (cl *Clients) Get() []net.Conn {
-	cl.Mutex.Lock()
-	defer cl.Mutex.Unlock()
+	cl.Mutex.RLock()
+	defer cl.Mutex.RUnlock()
 	keys := make([]net.Conn, 0, len(cl.Clients))
 
 	fmt.Printf("Found %d connected clients\r\n", len(cl.Clients))

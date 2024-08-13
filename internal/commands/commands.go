@@ -15,7 +15,7 @@ import (
 	"github.com/codecrafters-io/redis-starter-go/internal/store"
 )
 
-var Propagated = [3]string{"SET", "DEL", "PING"}
+var Propagated = [3]string{"SET", "DEL"}
 
 type Command interface {
 	Execute(ctx context.Context, conn net.Conn, config config.Config, args []string)
