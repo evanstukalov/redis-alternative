@@ -129,13 +129,19 @@ func (c *InfoCommand) Execute(
 		role := fmt.Sprintf("role:%s", config.Role)
 		builder.WriteString(fmt.Sprintf("%s\n", role))
 
-		master_replid := fmt.Sprintf("master_replid:%s", config.Master.MasterReplId)
-		builder.WriteString(fmt.Sprintf("%s\n", master_replid))
+		switch config.Role {
+		case "master":
+			master_replid := fmt.Sprintf("master_replid:%s", config.Master.MasterReplId)
+			builder.WriteString(fmt.Sprintf("%s\n", master_replid))
 
-		master_repl_offset := fmt.Sprintf("master_repl_offset:%d", config.Master.MasterReplOffset)
-		builder.WriteString(
-			fmt.Sprintf("%s\n", master_repl_offset),
-		)
+			master_repl_offset := fmt.Sprintf(
+				"master_repl_offset:%d",
+				config.Master.MasterReplOffset,
+			)
+			builder.WriteString(
+				fmt.Sprintf("%s\n", master_repl_offset),
+			)
+		}
 
 		result := builder.String()
 
