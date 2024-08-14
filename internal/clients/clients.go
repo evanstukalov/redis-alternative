@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net"
 	"sync"
+
+	log "github.com/sirupsen/logrus"
 )
 
 type Clients struct {
@@ -21,7 +23,11 @@ func (cl *Clients) Set(client net.Conn) {
 	cl.Mutex.Lock()
 	defer cl.Mutex.Unlock()
 
-	fmt.Println("New client has been connected! ", client.RemoteAddr().String())
+	log.WithFields(log.Fields{
+		"package":  "master",
+		"function": "HandleCommand",
+		"Address":  client.RemoteAddr().String(),
+	}).Info("New client has been connected")
 
 	cl.Clients[client] = struct{}{}
 }

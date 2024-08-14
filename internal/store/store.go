@@ -2,10 +2,10 @@ package store
 
 import (
 	"errors"
-	"fmt"
-	"log"
 	"sync"
 	"time"
+
+	log "github.com/sirupsen/logrus"
 )
 
 type ValueWithExpiration struct {
@@ -57,5 +57,5 @@ func (s *Store) Get(key string) (interface{}, error) {
 
 func (s *Store) Remove(key string) {
 	delete(s.store, key)
-	fmt.Println("Remove key: ", key)
+	log.WithField("key", key).Info("Removing key from store")
 }

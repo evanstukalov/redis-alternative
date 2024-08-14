@@ -4,9 +4,11 @@ import (
 	"context"
 	"flag"
 	"fmt"
-	"log"
 	"net"
 	"os"
+
+	nested "github.com/antonfisher/nested-logrus-formatter"
+	log "github.com/sirupsen/logrus"
 
 	"github.com/codecrafters-io/redis-starter-go/internal/clients"
 	"github.com/codecrafters-io/redis-starter-go/internal/config"
@@ -15,7 +17,24 @@ import (
 	"github.com/codecrafters-io/redis-starter-go/internal/store"
 )
 
+func init() {
+	f := &nested.Formatter{
+		HideKeys:    true,
+		FieldsOrder: []string{"component", "category"},
+	}
+	log.SetFormatter(f)
+
+	log.SetOutput(os.Stdout)
+
+	log.SetLevel(log.DebugLevel)
+}
+
 func main() {
+	log.WithFields(log.Fields{
+		"package":  "main",
+		"function": "main",
+	}).Info("An application has started!")
+
 	port := flag.Int("port", 6379, "Port to listen on")
 	replicaOf := flag.String("replicaof", "", "Replica to another server")
 

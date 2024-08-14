@@ -3,10 +3,10 @@ package master
 import (
 	"bufio"
 	"context"
-	"fmt"
-	"log"
 	"net"
 	"strings"
+
+	log "github.com/sirupsen/logrus"
 
 	"github.com/codecrafters-io/redis-starter-go/internal/clients"
 	"github.com/codecrafters-io/redis-starter-go/internal/commands"
@@ -53,6 +53,12 @@ func HandleCommand(ctx context.Context, conn net.Conn, config config.Config, arg
 		return
 	}
 
+	log.WithFields(log.Fields{
+		"package":  "master",
+		"function": "HandleCommand",
+		"cmd":      args,
+	}).Info()
+
 	cmd.Execute(ctx, conn, config, args)
 
 	for _, command := range commands.Propagated {
@@ -69,8 +75,16 @@ func SendCommandAllClients(ctx context.Context, conn net.Conn, args []string) {
 			log.Fatalf("Expected *master.Clients, got %T", clientsFromContext)
 		} else {
 			for _, clientConn := range clients.Get() {
-				clientConn.Write([]byte(redis.ConvertToRESP(args)))
-				fmt.Println("Propagated command :", args, conn.RemoteAddr())
+				cmd := redis.ConvertToRESP(args)
+				cmdLen := len(cmd)
+
+				log.WithFields(log.Fields{
+					"package":  "master",
+					"function": "HandleCommand",
+					"cmdLen":   cmdLen,
+				}).Info()
+
+				clientConn.Write([]byte(cmd))
 				clientConn.Write([]byte(redis.ConvertToRESP([]string{"REPLCONF", "GETACK", "*"})))
 			}
 		}
