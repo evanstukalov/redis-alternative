@@ -222,6 +222,17 @@ func (c *PsyncCommand) Execute(
 	}
 }
 
+type WaitCommand struct{}
+
+func (c *WaitCommand) Execute(
+	ctx context.Context,
+	conn net.Conn,
+	config config.Config,
+	args []string,
+) {
+	conn.Write([]byte(":0\r\n"))
+}
+
 var Commands = map[string]Command{
 	"PING":     &PingCommand{},
 	"ECHO":     &EchoCommand{},
@@ -230,4 +241,5 @@ var Commands = map[string]Command{
 	"INFO":     &InfoCommand{},
 	"REPLCONF": &ReplConfCommand{},
 	"PSYNC":    &PsyncCommand{},
+	"WAIT":     &WaitCommand{},
 }
