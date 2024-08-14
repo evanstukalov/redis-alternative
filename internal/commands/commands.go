@@ -230,7 +230,16 @@ func (c *WaitCommand) Execute(
 	config config.Config,
 	args []string,
 ) {
-	conn.Write([]byte(":0\r\n"))
+	clientsFromContext := ctx.Value("clients")
+	if clientsFromContext != nil {
+		if clients, ok := clientsFromContext.(*clients.Clients); !ok {
+			log.Fatalf("Expected *master.Clients, got %T", clientsFromContext)
+		} else {
+			clientsLen := len(clients.Get())
+
+			conn.Write([]byte(fmt.Sprintf(":%d\r\n", clientsLen)))
+		}
+	}
 }
 
 var Commands = map[string]Command{
