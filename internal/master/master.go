@@ -71,6 +71,7 @@ func SendCommandAllClients(ctx context.Context, conn net.Conn, args []string) {
 			for _, clientConn := range clients.Get() {
 				clientConn.Write([]byte(redis.ConvertToRESP(args)))
 				fmt.Println("Propagated command :", args, conn.RemoteAddr())
+				clientConn.Write([]byte(redis.ConvertToRESP([]string{"REPLCONF", "GETACK", "*"})))
 			}
 		}
 	}
