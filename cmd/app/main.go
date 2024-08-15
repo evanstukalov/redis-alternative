@@ -18,10 +18,7 @@ import (
 )
 
 func init() {
-	f := &nested.Formatter{
-		HideKeys:    true,
-		FieldsOrder: []string{"component", "category"},
-	}
+	f := &nested.Formatter{}
 	log.SetFormatter(f)
 
 	log.SetOutput(os.Stdout)
@@ -68,8 +65,7 @@ func main() {
 	if *replicaOf == "" {
 		cfg.Role = "master"
 		cfg.Master = &config.Master{
-			MasterReplId:     "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb",
-			MasterReplOffset: 0,
+			MasterReplId: "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb",
 		}
 	} else {
 		cfg.Role = "slave"

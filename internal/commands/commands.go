@@ -4,15 +4,19 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
-	"log"
 	"net"
 	"strconv"
 	"strings"
+	"sync/atomic"
+	"time"
+
+	log "github.com/sirupsen/logrus"
 
 	"github.com/codecrafters-io/redis-starter-go/internal/clients"
 	"github.com/codecrafters-io/redis-starter-go/internal/config"
 	"github.com/codecrafters-io/redis-starter-go/internal/redis"
 	"github.com/codecrafters-io/redis-starter-go/internal/store"
+	"github.com/codecrafters-io/redis-starter-go/internal/utils"
 )
 
 var Propagated = [3]string{"SET", "DEL"}
@@ -136,7 +140,7 @@ func (c *InfoCommand) Execute(
 
 			master_repl_offset := fmt.Sprintf(
 				"master_repl_offset:%d",
-				config.Master.MasterReplOffset,
+				config.Master.MasterReplOffset.Load(),
 			)
 			builder.WriteString(
 				fmt.Sprintf("%s\n", master_repl_offset),
@@ -166,7 +170,13 @@ func (c *ReplConfCommand) Execute(
 	case "master":
 		switch args[1] {
 		case "ACK":
-			fmt.Println("REPL ACK ", args[2])
+			clients := utils.GetClientsObj(ctx)
+
+			_, ok := clients.Clients[conn]
+			if ok {
+				offset, _ := strconv.Atoi(args[2])
+				clients.SetOffset(conn, offset)
+			}
 		case "capa":
 			conn.Write([]byte("+OK\r\n"))
 		case "listening-port":
@@ -200,16 +210,14 @@ func (c *PsyncCommand) Execute(
 	data := fmt.Sprintf(
 		"+FULLRESYNC %s %d\r\n",
 		config.Master.MasterReplId,
-		config.Master.MasterReplOffset,
+		config.Master.MasterReplOffset.Load(),
 	)
 	emptyRDB, _ := hex.DecodeString(redis.EMPTYRDBSTORE)
 	data += fmt.Sprintf("$%d\r\n%s", len(emptyRDB), emptyRDB)
 
-	n, err := conn.Write([]byte(data))
+	_, err := conn.Write([]byte(data))
 	if err != nil {
 		fmt.Println("Error writing to ", conn.RemoteAddr().String())
-	} else {
-		fmt.Printf("Wrote %d bytes to the buffer\r\n", n)
 	}
 
 	clientsFromContext := ctx.Value("clients")
@@ -230,14 +238,100 @@ func (c *WaitCommand) Execute(
 	config config.Config,
 	args []string,
 ) {
-	clientsFromContext := ctx.Value("clients")
-	if clientsFromContext != nil {
-		if clients, ok := clientsFromContext.(*clients.Clients); !ok {
-			log.Fatalf("Expected *master.Clients, got %T", clientsFromContext)
-		} else {
-			clientsLen := len(clients.Get())
+	if len(args) < 3 {
+		fmt.Println("Not enough arguments")
+		return
+	}
 
-			conn.Write([]byte(fmt.Sprintf(":%d\r\n", clientsLen)))
+	goal, err := strconv.Atoi(args[1])
+	if err != nil {
+		fmt.Println("Error converting goal:", err)
+		return
+	}
+
+	timer, err := strconv.Atoi(args[2])
+	if err != nil {
+		fmt.Println("Erro converting timer:", err)
+		return
+	}
+	timerCh := time.After(time.Duration(timer) * time.Millisecond)
+
+	clientsObj := utils.GetClientsObj(ctx)
+
+	done := make(chan int, 1)
+
+	var counter int64
+
+	if config.Master.MasterReplOffset.Load() == 0 {
+		done <- len(clientsObj.Clients)
+	} else {
+
+		cmdReplConf := redis.ConvertToRESP([]string{"REPLCONF", "GETACK", "*"})
+
+		for _, client := range clientsObj.GetAll() {
+			client.Write([]byte(cmdReplConf))
+		}
+
+		clientsObj.Subscribe(func(conn net.Conn, clientOffset int) {
+			masterOffset := config.Master.MasterReplOffset.Load()
+			log.WithFields(log.Fields{
+				"package":      "commands",
+				"function":     "WaitCommand.Execute",
+				"masterOffset": masterOffset,
+				"clientOffset": clientOffset,
+				"conn":         conn,
+			}).Info("Notification alert")
+
+			if masterOffset <= int64(clientOffset) {
+				atomic.AddInt64(&counter, 1)
+
+				log.WithFields(log.Fields{
+					"package":  "commands",
+					"function": "WaitCommand.Execute",
+					"value":    int(atomic.LoadInt64(&counter)),
+					"goal":     goal,
+				}).Info("Changing counter of acked clients")
+
+				if goal == int(atomic.LoadInt64(&counter)) {
+					done <- int(atomic.LoadInt64(&counter))
+				}
+			}
+		})
+	}
+
+	writeMessage := func(c int) {
+		message := fmt.Sprintf(":%d\r\n", c)
+		if _, err := conn.Write([]byte(message)); err != nil {
+			log.WithFields(log.Fields{
+				"package":  "commands",
+				"function": "WaitCommand.Execute",
+				"error":    err,
+			}).Error("Error writing to connection")
+		}
+	}
+
+	for {
+		select {
+		case c := <-done:
+
+			log.WithFields(log.Fields{
+				"package":  "commands",
+				"function": "WaitCommand.Execute",
+				"value":    c,
+			}).Info("Returning")
+			writeMessage(c)
+
+			return
+		case <-timerCh:
+			writeMessage(int(atomic.LoadInt64(&counter)))
+
+			log.WithFields(log.Fields{
+				"package":  "commands",
+				"function": "WaitCommand.Execute",
+				"value":    atomic.LoadInt64(&counter),
+				"goal":     goal,
+			}).Info("Time is up!")
+			return
 		}
 	}
 }

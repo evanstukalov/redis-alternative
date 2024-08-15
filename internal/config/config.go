@@ -16,5 +16,5 @@ type Slave struct {
 
 type Master struct {
 	MasterReplId     string
-	MasterReplOffset int
+	MasterReplOffset atomic.Int64
 }

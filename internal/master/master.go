@@ -8,10 +8,10 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	"github.com/codecrafters-io/redis-starter-go/internal/clients"
 	"github.com/codecrafters-io/redis-starter-go/internal/commands"
 	"github.com/codecrafters-io/redis-starter-go/internal/config"
 	"github.com/codecrafters-io/redis-starter-go/internal/redis"
+	"github.com/codecrafters-io/redis-starter-go/internal/utils"
 )
 
 func AcceptConnections(l net.Listener, connChan chan<- net.Conn, errChan chan<- error) {
@@ -57,36 +57,37 @@ func HandleCommand(ctx context.Context, conn net.Conn, config config.Config, arg
 		"package":  "master",
 		"function": "HandleCommand",
 		"cmd":      args,
+		"conn":     conn.RemoteAddr().String(),
 	}).Info()
 
 	cmd.Execute(ctx, conn, config, args)
 
 	for _, command := range commands.Propagated {
 		if command == args[0] {
-			SendCommandAllClients(ctx, conn, args)
+			cmd := redis.ConvertToRESP(
+				args,
+			)
+			config.Master.MasterReplOffset.Add(int64(len(cmd)))
+
+			SendCommandAllClients(ctx, conn, config, cmd)
 		}
 	}
 }
 
-func SendCommandAllClients(ctx context.Context, conn net.Conn, args []string) {
-	clientsFromContext := ctx.Value("clients")
-	if clientsFromContext != nil {
-		if clients, ok := clientsFromContext.(*clients.Clients); !ok {
-			log.Fatalf("Expected *master.Clients, got %T", clientsFromContext)
-		} else {
-			for _, clientConn := range clients.Get() {
-				cmd := redis.ConvertToRESP(args)
-				cmdLen := len(cmd)
+func SendCommandAllClients(
+	ctx context.Context,
+	conn net.Conn,
+	config config.Config,
+	cmd string,
+) {
+	clients := utils.GetClientsObj(ctx)
 
-				log.WithFields(log.Fields{
-					"package":  "master",
-					"function": "HandleCommand",
-					"cmdLen":   cmdLen,
-				}).Info()
+	for _, clientConn := range clients.GetAll() {
+		log.WithFields(log.Fields{
+			"package":  "master",
+			"function": "HandleCommand",
+		}).Info()
 
-				clientConn.Write([]byte(cmd))
-				clientConn.Write([]byte(redis.ConvertToRESP([]string{"REPLCONF", "GETACK", "*"})))
-			}
-		}
+		clientConn.Write([]byte(cmd))
 	}
 }
