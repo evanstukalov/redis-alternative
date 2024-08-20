@@ -25,6 +25,13 @@ type Command interface {
 	Execute(ctx context.Context, conn net.Conn, config config.Config, args []string)
 }
 
+type CommandHandler func(
+	ctx context.Context,
+	conn net.Conn,
+	config config.Config,
+	args []string,
+)
+
 type EchoCommand struct{}
 
 func (c *EchoCommand) Execute(
@@ -166,36 +173,13 @@ func (c *ReplConfCommand) Execute(
 	config config.Config,
 	args []string,
 ) {
-	switch config.Role {
-	case "master":
-		switch args[1] {
-		case "ACK":
-			clients := utils.GetClientsObj(ctx)
+	commands := map[string]CommandHandler{
+		"master": c.handleMaster,
+		"slave":  c.handleSlave,
+	}
 
-			_, ok := clients.Clients[conn]
-			if ok {
-				offset, _ := strconv.Atoi(args[2])
-				clients.SetOffset(conn, offset)
-			}
-		case "capa":
-			conn.Write([]byte("+OK\r\n"))
-		case "listening-port":
-			conn.Write([]byte("+OK\r\n"))
-		}
-	case "slave":
-		if args[1] == "GETACK" && args[2] == "*" {
-			offset := config.Slave.Offset.Load()
-			byteCount := len(strconv.Itoa(int(offset)))
-			conn.Write(
-				[]byte(
-					fmt.Sprintf(
-						"*3\r\n$8\r\nREPLCONF\r\n$3\r\nACK\r\n$%d\r\n%d\r\n",
-						byteCount,
-						offset,
-					),
-				),
-			)
-		}
+	if handler, exists := commands[config.Role]; exists {
+		handler(ctx, conn, config, args)
 	}
 }
 
@@ -348,25 +332,12 @@ func (c *ConfigCommand) Execute(
 		log.Error("Missing arguments")
 		return
 	}
+	commands := map[string]CommandHandler{
+		"GET": c.handleGet,
+	}
 
-	switch args[1] {
-	case "GET":
-		switch args[2] {
-		case "dir":
-			dir := fmt.Sprintf(
-				"*2\r\n$3\r\ndir\r\n$%d\r\n%s\r\n",
-				len(config.RedisDir),
-				config.RedisDir,
-			)
-			conn.Write([]byte(dir))
-		case "dbfilename":
-			dbFileName := fmt.Sprintf(
-				"*2\r\n$10\r\ndbfilename\r\n$%d\r\n%s\r\n",
-				len(config.RedisDbFileName),
-				config.RedisDbFileName,
-			)
-			conn.Write([]byte(dbFileName))
-		}
+	if handler, exists := commands[args[1]]; exists {
+		handler(ctx, conn, config, args)
 	}
 }
 
