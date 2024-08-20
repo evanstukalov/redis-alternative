@@ -34,11 +34,15 @@ func main() {
 
 	port := flag.Int("port", 6379, "Port to listen on")
 	replicaOf := flag.String("replicaof", "", "Replica to another server")
+	dir := flag.String("dir", "", "Directory to store data")
+	dbFileName := flag.String("dbfilename", "", "Database file name")
 
 	flag.Parse()
 
 	cfg := config.Config{
-		Port: *port,
+		Port:            *port,
+		RedisDir:        *dir,
+		RedisDbFileName: *dbFileName,
 	}
 
 	storeObj := store.NewStore()

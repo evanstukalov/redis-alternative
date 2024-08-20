@@ -336,6 +336,40 @@ func (c *WaitCommand) Execute(
 	}
 }
 
+type ConfigCommand struct{}
+
+func (c *ConfigCommand) Execute(
+	ctx context.Context,
+	conn net.Conn,
+	config config.Config,
+	args []string,
+) {
+	if len(args) < 3 {
+		log.Error("Missing arguments")
+		return
+	}
+
+	switch args[1] {
+	case "GET":
+		switch args[2] {
+		case "dir":
+			dir := fmt.Sprintf(
+				"*2\r\n$3\r\ndir\r\n$%d\r\n%s\r\n",
+				len(config.RedisDir),
+				config.RedisDir,
+			)
+			conn.Write([]byte(dir))
+		case "dbfilename":
+			dbFileName := fmt.Sprintf(
+				"*2\r\n$10\r\ndbfilename\r\n$%d\r\n%s\r\n",
+				len(config.RedisDbFileName),
+				config.RedisDbFileName,
+			)
+			conn.Write([]byte(dbFileName))
+		}
+	}
+}
+
 var Commands = map[string]Command{
 	"PING":     &PingCommand{},
 	"ECHO":     &EchoCommand{},
@@ -345,4 +379,5 @@ var Commands = map[string]Command{
 	"REPLCONF": &ReplConfCommand{},
 	"PSYNC":    &PsyncCommand{},
 	"WAIT":     &WaitCommand{},
+	"CONFIG":   &ConfigCommand{},
 }

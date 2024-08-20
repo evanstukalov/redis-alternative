@@ -7,6 +7,9 @@ type Config struct {
 	Role   string
 	Master *Master
 	Slave  *Slave
+
+	RedisDir        string
+	RedisDbFileName string
 }
 
 type Slave struct {
