@@ -19,8 +19,6 @@ import (
 	"github.com/codecrafters-io/redis-starter-go/internal/utils"
 )
 
-var Propagated = [3]string{"SET", "DEL"}
-
 type Command interface {
 	Execute(ctx context.Context, conn net.Conn, config config.Config, args []string)
 }
@@ -31,6 +29,21 @@ type CommandHandler func(
 	config config.Config,
 	args []string,
 )
+
+var Propagated = [3]string{"SET", "DEL"}
+
+var Commands = map[string]Command{
+	"PING":     &PingCommand{},
+	"ECHO":     &EchoCommand{},
+	"SET":      &SetCommand{},
+	"GET":      &GetCommand{},
+	"INFO":     &InfoCommand{},
+	"REPLCONF": &ReplConfCommand{},
+	"PSYNC":    &PsyncCommand{},
+	"WAIT":     &WaitCommand{},
+	"CONFIG":   &ConfigCommand{},
+	"KEYS":     &KeysCommand{},
+}
 
 type EchoCommand struct{}
 
@@ -341,14 +354,24 @@ func (c *ConfigCommand) Execute(
 	}
 }
 
-var Commands = map[string]Command{
-	"PING":     &PingCommand{},
-	"ECHO":     &EchoCommand{},
-	"SET":      &SetCommand{},
-	"GET":      &GetCommand{},
-	"INFO":     &InfoCommand{},
-	"REPLCONF": &ReplConfCommand{},
-	"PSYNC":    &PsyncCommand{},
-	"WAIT":     &WaitCommand{},
-	"CONFIG":   &ConfigCommand{},
+type KeysCommand struct{}
+
+func (c *KeysCommand) Execute(
+	ctx context.Context,
+	conn net.Conn,
+	config config.Config,
+	args []string,
+) {
+	if len(args) < 2 {
+		log.Error("Missing arguments")
+		return
+	}
+
+	commands := map[string]CommandHandler{
+		"*": c.handleAll,
+	}
+
+	if handler, exists := commands[args[1]]; exists {
+		handler(ctx, conn, config, args)
+	}
 }
