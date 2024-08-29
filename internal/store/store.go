@@ -2,6 +2,7 @@ package store
 
 import (
 	"errors"
+	"strconv"
 	"sync"
 	"time"
 
@@ -9,7 +10,7 @@ import (
 )
 
 type ValueWithExpiration struct {
-	value     interface{}
+	value     string
 	ExpiredAt *time.Time
 }
 
@@ -24,7 +25,7 @@ func NewStore() *Store {
 	}
 }
 
-func (s *Store) Set(key string, value interface{}, px *int) {
+func (s *Store) Set(key string, value string, px *int) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
@@ -43,16 +44,41 @@ func (s *Store) Set(key string, value interface{}, px *int) {
 	log.Println("Set handler: ", key, value)
 }
 
-func (s *Store) Get(key string) (interface{}, error) {
+func (s *Store) Get(key string) (string, error) {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
 
 	if value, ok := s.store[key]; !ok {
-		return nil, errors.New("key does not exists")
+		return "", errors.New("key does not exists")
 	} else {
 		log.Println("Get handler: ", key, value.value)
 		return value.value, nil
 	}
+}
+
+func (s *Store) Incr(key string) (int, error) {
+	log.WithFields(log.Fields{"key": key}).Info("Incrementing key in store")
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	v, ok := s.store[key]
+	if !ok {
+		s.store[key] = ValueWithExpiration{
+			value: "1",
+		}
+		return 1, nil
+	}
+
+	intValue, err := strconv.Atoi(v.value)
+	if err != nil {
+		return 0, errors.New("Unsupported type")
+	}
+
+	intValue++
+	s.store[key] = ValueWithExpiration{
+		value: strconv.Itoa(intValue),
+	}
+	return intValue, nil
 }
 
 func (s *Store) Remove(key string) {

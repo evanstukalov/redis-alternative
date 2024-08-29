@@ -43,6 +43,32 @@ var Commands = map[string]Command{
 	"WAIT":     &WaitCommand{},
 	"CONFIG":   &ConfigCommand{},
 	"KEYS":     &KeysCommand{},
+	"INCR":     &IncrCommand{},
+}
+
+type IncrCommand struct{}
+
+func (c *IncrCommand) Execute(
+	ctx context.Context,
+	conn net.Conn,
+	config config.Config,
+	args []string,
+) {
+	if len(args) < 2 {
+		log.Error("Missing arguments")
+		return
+	}
+	key := args[1]
+
+	storeObj := utils.GetStoreObj(ctx)
+
+	value, err := storeObj.Incr(key)
+	if err != nil {
+		conn.Write([]byte("-ERR value is not an integer or out of range\r\n"))
+		return
+	}
+
+	conn.Write([]byte(fmt.Sprintf(":%d\r\n", value)))
 }
 
 type EchoCommand struct{}
