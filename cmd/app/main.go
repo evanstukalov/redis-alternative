@@ -15,6 +15,7 @@ import (
 	"github.com/codecrafters-io/redis-starter-go/internal/master"
 	"github.com/codecrafters-io/redis-starter-go/internal/slave"
 	"github.com/codecrafters-io/redis-starter-go/internal/store"
+	"github.com/codecrafters-io/redis-starter-go/internal/utils"
 )
 
 func init() {
@@ -89,6 +90,7 @@ func main() {
 		go slave.ReadFromConnection(ctx, masterConn, reader, cfg)
 	}
 
+	utils.LoadRDB(ctx, cfg.RedisDir, cfg.RedisDbFileName)
 	go master.AcceptConnections(l, connChan, errChan)
 	go expiredCollector.Tick()
 

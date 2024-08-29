@@ -1,7 +1,11 @@
 package utils
 
 import (
+	"context"
+	"fmt"
 	"os"
+
+	"github.com/sirupsen/logrus"
 )
 
 const (
@@ -33,7 +37,30 @@ func parseTable(bytes []byte) []byte {
 
 func ReadFile(path string) string {
 	c, _ := os.ReadFile(path)
+	logrus.Debug(c)
+	logrus.Debug(string(c))
 	key := parseTable(c)
 	str := key[4 : 4+key[3]]
 	return string(str)
+}
+
+func LoadRDB(ctx context.Context, dir string, dbFileName string) {
+	path := fmt.Sprintf("%s/%s", dir, dbFileName)
+	content, _ := os.ReadFile(path)
+	if len(content) == 0 {
+		logrus.Info("RDB file is empty")
+		return
+	}
+
+	line := parseTable(content)
+	key := string(line[4 : 4+line[3]])
+	value := string(line[5+line[3]:])
+
+	logrus.WithFields(logrus.Fields{
+		"key":   key,
+		"value": value,
+	}).Debug("LoadRDB")
+
+	storeObj := GetStoreObj(ctx)
+	storeObj.Set(key, value, nil)
 }
