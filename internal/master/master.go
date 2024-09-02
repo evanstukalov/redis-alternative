@@ -11,6 +11,7 @@ import (
 	"github.com/codecrafters-io/redis-starter-go/internal/commands"
 	"github.com/codecrafters-io/redis-starter-go/internal/config"
 	"github.com/codecrafters-io/redis-starter-go/internal/redis"
+	"github.com/codecrafters-io/redis-starter-go/internal/transactions"
 	"github.com/codecrafters-io/redis-starter-go/internal/utils"
 )
 
@@ -59,6 +60,35 @@ func HandleCommand(ctx context.Context, conn net.Conn, config config.Config, arg
 		"cmd":      args,
 		"conn":     conn.RemoteAddr().String(),
 	}).Info()
+
+	transactionsObj := transactions.GetTransactionBufferObj(ctx)
+
+	if _, ok := cmd.(*commands.ExecCommand); ok {
+
+		if !transactionsObj.IsTransactionActive() {
+			conn.Write([]byte("-ERR EXEC without MULTI\r\n"))
+			return
+		}
+
+		transactionsObj.EndTransaction()
+
+		for _, command := range transactionsObj.PopCommands() {
+			args := command.Args
+			cmd := command.CMD
+			cmd.Execute(ctx, conn, config, args)
+		}
+
+	}
+
+	if transactionsObj.IsTransactionActive() {
+		transactionsObj.PutCommand(&transactions.BufferedCommand{
+			CMD:  cmd,
+			Args: args,
+		})
+
+		conn.Write([]byte("+QUEUED\r\n"))
+		return
+	}
 
 	cmd.Execute(ctx, conn, config, args)
 

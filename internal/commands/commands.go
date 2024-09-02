@@ -16,6 +16,7 @@ import (
 	"github.com/codecrafters-io/redis-starter-go/internal/config"
 	"github.com/codecrafters-io/redis-starter-go/internal/redis"
 	"github.com/codecrafters-io/redis-starter-go/internal/store"
+	"github.com/codecrafters-io/redis-starter-go/internal/transactions"
 	"github.com/codecrafters-io/redis-starter-go/internal/utils"
 )
 
@@ -45,6 +46,17 @@ var Commands = map[string]Command{
 	"KEYS":     &KeysCommand{},
 	"INCR":     &IncrCommand{},
 	"MULTI":    &MultiCommand{},
+	"EXEC":     &ExecCommand{},
+}
+
+type ExecCommand struct{}
+
+func (c *ExecCommand) Execute(
+	ctx context.Context,
+	conn net.Conn,
+	config config.Config,
+	args []string,
+) {
 }
 
 type MultiCommand struct{}
@@ -55,6 +67,9 @@ func (c *MultiCommand) Execute(
 	config config.Config,
 	args []string,
 ) {
+	transactionObj := transactions.GetTransactionBufferObj(ctx)
+	transactionObj.StartTransaction()
+
 	conn.Write([]byte("+OK\r\n"))
 }
 

@@ -4,7 +4,7 @@ import (
 	"net"
 	"sync"
 
-	log "github.com/sirupsen/logrus"
+	"github.com/sirupsen/logrus"
 )
 
 type offset int64
@@ -16,6 +16,7 @@ type Clients struct {
 }
 
 func NewClients() *Clients {
+	logrus.Info("Creating new clients")
 	return &Clients{
 		Clients: make(map[net.Conn]offset),
 	}
@@ -25,7 +26,7 @@ func (cl *Clients) Set(client net.Conn) {
 	cl.Mutex.Lock()
 	defer cl.Mutex.Unlock()
 
-	log.WithFields(log.Fields{
+	logrus.WithFields(logrus.Fields{
 		"package":  "clients",
 		"function": "Set",
 		"Address":  client.RemoteAddr().String(),
@@ -39,7 +40,7 @@ func (cl *Clients) GetAll() []net.Conn {
 	defer cl.Mutex.RUnlock()
 	keys := make([]net.Conn, 0, len(cl.Clients))
 
-	log.WithFields(log.Fields{
+	logrus.WithFields(logrus.Fields{
 		"package":  "clients",
 		"function": "GetAll",
 		"value":    cl.Clients,
@@ -56,7 +57,7 @@ func (cl *Clients) SetOffset(conn net.Conn, n int) {
 	cl.Mutex.Lock()
 	defer cl.Mutex.Unlock()
 
-	log.WithFields(log.Fields{
+	logrus.WithFields(logrus.Fields{
 		"package":  "clients",
 		"function": "SetOffset",
 		"value":    offset(n),
@@ -72,7 +73,7 @@ func (cl *Clients) GetOffset(conn net.Conn) offset {
 	defer cl.Mutex.Unlock()
 	value := cl.Clients[conn]
 
-	log.WithFields(log.Fields{
+	logrus.WithFields(logrus.Fields{
 		"package":  "clients",
 		"function": "GetOffset",
 
@@ -83,7 +84,7 @@ func (cl *Clients) GetOffset(conn net.Conn) offset {
 }
 
 func (cl *Clients) Notify(conn net.Conn, offset int) {
-	log.WithFields(log.Fields{
+	logrus.WithFields(logrus.Fields{
 		"package":  "clients",
 		"function": "Notify",
 	}).Info("Notify subsriber")
@@ -106,7 +107,7 @@ func (cl *Clients) Subscribe(handler func(conn net.Conn, clientOffset int)) {
 	cl.Mutex.Lock()
 	defer cl.Mutex.Unlock()
 
-	log.WithFields(log.Fields{
+	logrus.WithFields(logrus.Fields{
 		"package":  "clients",
 		"function": "Subscribe",
 	}).Info("New handler subsribed.")

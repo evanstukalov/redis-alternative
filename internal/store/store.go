@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -20,6 +21,7 @@ type Store struct {
 }
 
 func NewStore() *Store {
+	logrus.Info("Creating new store")
 	return &Store{
 		store: make(map[string]ValueWithExpiration),
 	}

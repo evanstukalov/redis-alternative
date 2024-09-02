@@ -15,6 +15,7 @@ import (
 	"github.com/codecrafters-io/redis-starter-go/internal/master"
 	"github.com/codecrafters-io/redis-starter-go/internal/slave"
 	"github.com/codecrafters-io/redis-starter-go/internal/store"
+	"github.com/codecrafters-io/redis-starter-go/internal/transactions"
 	"github.com/codecrafters-io/redis-starter-go/internal/utils"
 )
 
@@ -48,12 +49,13 @@ func main() {
 
 	storeObj := store.NewStore()
 	expiredCollector := store.NewExpiredCollector(storeObj)
-	defer expiredCollector.Stop()
 	clients := clients.NewClients()
+	transactionBuffer := transactions.NewTransactionBuffer()
 
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, "store", storeObj)
 	ctx = context.WithValue(ctx, "clients", clients)
+	ctx = context.WithValue(ctx, "transactionBuffer", transactionBuffer)
 
 	address := fmt.Sprintf("0.0.0.0:%d", cfg.Port)
 
