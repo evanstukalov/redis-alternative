@@ -44,6 +44,18 @@ var Commands = map[string]Command{
 	"CONFIG":   &ConfigCommand{},
 	"KEYS":     &KeysCommand{},
 	"INCR":     &IncrCommand{},
+	"MULTI":    &MultiCommand{},
+}
+
+type MultiCommand struct{}
+
+func (c *MultiCommand) Execute(
+	ctx context.Context,
+	conn net.Conn,
+	config config.Config,
+	args []string,
+) {
+	conn.Write([]byte("+OK\r\n"))
 }
 
 type IncrCommand struct{}
