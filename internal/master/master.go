@@ -63,35 +63,7 @@ func HandleCommand(ctx context.Context, conn net.Conn, config config.Config, arg
 
 	transactionsObj := transactions.GetTransactionBufferObj(ctx)
 
-	if _, ok := cmd.(*commands.ExecCommand); ok {
-		if !transactionsObj.IsTransactionActive() {
-			conn.Write([]byte("-ERR EXEC without MULTI\r\n"))
-			return
-		}
-
-		if transactionsObj.IsBufferEmpty() {
-			conn.Write([]byte("*0\r\n"))
-
-			transactionsObj.EndTransaction()
-			return
-		}
-
-		commands := transactionsObj.PopCommands()
-
-		for _, command := range commands {
-			args := command.Args
-			cmd := command.CMD
-			cmd.Execute(ctx, conn, config, args)
-		}
-
-		transactionsObj.EndTransaction()
-
-		conn.Write([]byte("+OK\r\n"))
-		return
-
-	}
-
-	if transactionsObj.IsTransactionActive() {
+	if _, ok := cmd.(*commands.ExecCommand); !ok && transactionsObj.IsTransactionActive(){
 		transactionsObj.PutCommand(&transactions.BufferedCommand{
 			CMD:  cmd,
 			Args: args,

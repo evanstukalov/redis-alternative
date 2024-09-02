@@ -57,6 +57,32 @@ func (c *ExecCommand) Execute(
 	config config.Config,
 	args []string,
 ) {
+	transactionsObj := transactions.GetTransactionBufferObj(ctx)
+
+	if !transactionsObj.IsTransactionActive() {
+		conn.Write([]byte("-ERR EXEC without MULTI\r\n"))
+		return
+	}
+
+	if transactionsObj.IsBufferEmpty() {
+		conn.Write([]byte("*0\r\n"))
+
+		transactionsObj.EndTransaction()
+		return
+	}
+
+	commands := transactionsObj.PopCommands()
+
+	for _, command := range commands {
+		args := command.Args
+		cmd := command.CMD
+		cmd.Execute(ctx, conn, config, args)
+	}
+
+	transactionsObj.EndTransaction()
+
+	conn.Write([]byte("+OK\r\n"))
+	return
 }
 
 type MultiCommand struct{}
