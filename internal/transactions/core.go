@@ -29,7 +29,7 @@ func NewTransactionBuffer() *TransactionBuffer {
 	logrus.Info("Creating new transaction buffer")
 
 	return &TransactionBuffer{
-		CommandsBuffer: make([]*BufferedCommand, 8),
+		CommandsBuffer: make([]*BufferedCommand, 0, 8),
 	}
 }
 
@@ -42,10 +42,33 @@ func (t *TransactionBuffer) StartTransaction() {
 func (t *TransactionBuffer) IsTransactionActive() bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	return t.Active
+	result := t.Active
+
+	logrus.WithFields(logrus.Fields{
+		"package":  "transactions",
+		"function": "IsTransactionActive",
+		"result":   result,
+	}).Info()
+
+	return result
+}
+
+func (t *TransactionBuffer) IsBufferEmpty() bool {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	result := len(t.CommandsBuffer) == 0
+
+	logrus.WithFields(logrus.Fields{
+		"package":  "transactions",
+		"function": "IsBufferEmpty",
+		"result":   result,
+	})
+
+	return result
 }
 
 func (t *TransactionBuffer) EndTransaction() {
+	logrus.Info("Ending transaction")
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.Active = false
@@ -64,7 +87,7 @@ func (t *TransactionBuffer) PopCommands() []*BufferedCommand {
 	result := make([]*BufferedCommand, len(t.CommandsBuffer))
 	copy(result, t.CommandsBuffer)
 
-	t.CommandsBuffer = make([]*BufferedCommand, 8)
+	t.CommandsBuffer = make([]*BufferedCommand, 0, 8)
 
 	return result
 }
