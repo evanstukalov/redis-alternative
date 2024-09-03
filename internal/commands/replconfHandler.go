@@ -3,6 +3,7 @@ package commands
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"strconv"
 
@@ -12,7 +13,7 @@ import (
 
 func (c *ReplConfCommand) handleMaster(
 	ctx context.Context,
-	conn net.Conn,
+	conn io.Writer,
 	config config.Config,
 	args []string,
 ) {
@@ -29,7 +30,7 @@ func (c *ReplConfCommand) handleMaster(
 
 func (c *ReplConfCommand) handleSlave(
 	ctx context.Context,
-	conn net.Conn,
+	conn io.Writer,
 	config config.Config,
 	args []string,
 ) {
@@ -50,7 +51,7 @@ func (c *ReplConfCommand) handleSlave(
 
 func (c *ReplConfCommand) handleOk(
 	ctx context.Context,
-	conn net.Conn,
+	conn io.Writer,
 	config config.Config,
 	args []string,
 ) {
@@ -59,15 +60,19 @@ func (c *ReplConfCommand) handleOk(
 
 func (c *ReplConfCommand) handleAck(
 	ctx context.Context,
-	conn net.Conn,
+	conn io.Writer,
 	config config.Config,
 	args []string,
 ) {
 	clients := utils.GetClientsObj(ctx)
 
-	_, ok := clients.Clients[conn]
-	if ok {
-		offset, _ := strconv.Atoi(args[2])
-		clients.SetOffset(conn, offset)
+	if conn, ok := conn.(net.Conn); ok {
+
+		_, ok := clients.Clients[conn]
+
+		if ok {
+			offset, _ := strconv.Atoi(args[2])
+			clients.SetOffset(conn, offset)
+		}
 	}
 }

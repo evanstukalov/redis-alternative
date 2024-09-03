@@ -3,7 +3,7 @@ package commands
 import (
 	"context"
 	"fmt"
-	"net"
+	"io"
 
 	"github.com/codecrafters-io/redis-starter-go/internal/config"
 	"github.com/codecrafters-io/redis-starter-go/internal/utils"
@@ -11,7 +11,7 @@ import (
 
 func (c *KeysCommand) handleAll(
 	ctx context.Context,
-	conn net.Conn,
+	conn io.Writer,
 	config config.Config,
 	args []string,
 ) {

@@ -2,6 +2,7 @@ package transactions
 
 import (
 	"context"
+	"io"
 	"net"
 	"sync"
 
@@ -11,7 +12,7 @@ import (
 )
 
 type Command interface {
-	Execute(ctx context.Context, conn net.Conn, config config.Config, args []string)
+	Execute(ctx context.Context, conn io.Writer, config config.Config, args []string)
 }
 
 type BufferedCommand struct {

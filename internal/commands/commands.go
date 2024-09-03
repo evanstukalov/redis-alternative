@@ -1,9 +1,11 @@
 package commands
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"net"
 	"strconv"
 	"strings"
@@ -21,12 +23,12 @@ import (
 )
 
 type Command interface {
-	Execute(ctx context.Context, conn net.Conn, config config.Config, args []string)
+	Execute(ctx context.Context, conn io.Writer, config config.Config, args []string)
 }
 
 type CommandHandler func(
 	ctx context.Context,
-	conn net.Conn,
+	conn io.Writer,
 	config config.Config,
 	args []string,
 )
@@ -53,37 +55,49 @@ type ExecCommand struct{}
 
 func (c *ExecCommand) Execute(
 	ctx context.Context,
-	conn net.Conn,
+	conn io.Writer,
 	config config.Config,
 	args []string,
 ) {
 	transactionsObj := transactions.GetTransactionsObj(ctx)
 
-	transactionBufferObj := transactionsObj.Values[conn]
+	var buffer bytes.Buffer
+	buffer.Grow(8)
 
-	if !transactionBufferObj.IsTransactionActive() {
-		conn.Write([]byte("-ERR EXEC without MULTI\r\n"))
-		return
-	}
+	var lenCommands int
 
-	if transactionBufferObj.IsBufferEmpty() {
-		conn.Write([]byte("*0\r\n"))
+	if conn, ok := conn.(net.Conn); ok {
+		transactionBufferObj := transactionsObj.Values[conn]
+
+		if !transactionBufferObj.IsTransactionActive() {
+			conn.Write([]byte("-ERR EXEC without MULTI\r\n"))
+			return
+		}
+
+		if transactionBufferObj.IsBufferEmpty() {
+			conn.Write([]byte("*0\r\n"))
+
+			transactionBufferObj.EndTransaction()
+			return
+		}
+
+		commands := transactionBufferObj.PopCommands()
+		lenCommands = len(commands)
+
+		for _, command := range commands {
+			args := command.Args
+			cmd := command.CMD
+
+			if _, ok := conn.(net.Conn); ok {
+				cmd.Execute(ctx, &buffer, config, args)
+			}
+		}
 
 		transactionBufferObj.EndTransaction()
-		return
 	}
 
-	commands := transactionBufferObj.PopCommands()
-
-	for _, command := range commands {
-		args := command.Args
-		cmd := command.CMD
-		cmd.Execute(ctx, conn, config, args)
-	}
-
-	transactionBufferObj.EndTransaction()
-
-	conn.Write([]byte("+OK\r\n"))
+	result := fmt.Sprintf("*%d\r\n%s", lenCommands, buffer.String())
+	conn.Write([]byte(result))
 	return
 }
 
@@ -91,14 +105,16 @@ type MultiCommand struct{}
 
 func (c *MultiCommand) Execute(
 	ctx context.Context,
-	conn net.Conn,
+	conn io.Writer,
 	config config.Config,
 	args []string,
 ) {
 	transactionsObj := transactions.GetTransactionsObj(ctx)
-	transactionBufferObj := transactionsObj.Values[conn]
 
-	transactionBufferObj.StartTransaction()
+	if conn, ok := conn.(net.Conn); ok {
+		transactionBufferObj := transactionsObj.Values[conn]
+		transactionBufferObj.StartTransaction()
+	}
 
 	conn.Write([]byte("+OK\r\n"))
 }
@@ -107,7 +123,7 @@ type IncrCommand struct{}
 
 func (c *IncrCommand) Execute(
 	ctx context.Context,
-	conn net.Conn,
+	conn io.Writer,
 	config config.Config,
 	args []string,
 ) {
@@ -132,7 +148,7 @@ type EchoCommand struct{}
 
 func (c *EchoCommand) Execute(
 	ctx context.Context,
-	conn net.Conn,
+	conn io.Writer,
 	config config.Config,
 	args []string,
 ) {
@@ -144,7 +160,7 @@ type PingCommand struct{}
 
 func (c *PingCommand) Execute(
 	ctx context.Context,
-	conn net.Conn,
+	conn io.Writer,
 	config config.Config,
 	args []string,
 ) {
@@ -158,7 +174,7 @@ type SetCommand struct{}
 
 func (c *SetCommand) Execute(
 	ctx context.Context,
-	conn net.Conn,
+	conn io.Writer,
 	config config.Config,
 	args []string,
 ) {
@@ -198,7 +214,7 @@ type GetCommand struct{}
 
 func (c *GetCommand) Execute(
 	ctx context.Context,
-	conn net.Conn,
+	conn io.Writer,
 	config config.Config,
 	args []string,
 ) {
@@ -224,7 +240,7 @@ type InfoCommand struct{}
 
 func (c *InfoCommand) Execute(
 	ctx context.Context,
-	conn net.Conn,
+	conn io.Writer,
 	config config.Config,
 	args []string,
 ) {
@@ -265,7 +281,7 @@ type ReplConfCommand struct{}
 
 func (c *ReplConfCommand) Execute(
 	ctx context.Context,
-	conn net.Conn,
+	conn io.Writer,
 	config config.Config,
 	args []string,
 ) {
@@ -283,7 +299,7 @@ type PsyncCommand struct{}
 
 func (c *PsyncCommand) Execute(
 	ctx context.Context,
-	conn net.Conn,
+	conn io.Writer,
 	config config.Config,
 	args []string,
 ) {
@@ -297,7 +313,7 @@ func (c *PsyncCommand) Execute(
 
 	_, err := conn.Write([]byte(data))
 	if err != nil {
-		fmt.Println("Error writing to ", conn.RemoteAddr().String())
+		fmt.Println("Error writing", err)
 	}
 
 	clientsFromContext := ctx.Value("clients")
@@ -305,7 +321,9 @@ func (c *PsyncCommand) Execute(
 		if clients, ok := clientsFromContext.(*clients.Clients); !ok {
 			log.Fatalf("Expected *master.Clients, got %T", clientsFromContext)
 		} else {
-			clients.Set(conn)
+			if conn, ok := conn.(net.Conn); ok {
+				clients.Set(conn)
+			}
 		}
 	}
 }
@@ -314,7 +332,7 @@ type WaitCommand struct{}
 
 func (c *WaitCommand) Execute(
 	ctx context.Context,
-	conn net.Conn,
+	conn io.Writer,
 	config config.Config,
 	args []string,
 ) {
@@ -420,7 +438,7 @@ type ConfigCommand struct{}
 
 func (c *ConfigCommand) Execute(
 	ctx context.Context,
-	conn net.Conn,
+	conn io.Writer,
 	config config.Config,
 	args []string,
 ) {
@@ -441,7 +459,7 @@ type KeysCommand struct{}
 
 func (c *KeysCommand) Execute(
 	ctx context.Context,
-	conn net.Conn,
+	conn io.Writer,
 	config config.Config,
 	args []string,
 ) {

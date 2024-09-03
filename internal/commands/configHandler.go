@@ -3,14 +3,14 @@ package commands
 import (
 	"context"
 	"fmt"
-	"net"
+	"io"
 
 	"github.com/codecrafters-io/redis-starter-go/internal/config"
 )
 
 func (c *ConfigCommand) handleGet(
 	ctx context.Context,
-	conn net.Conn,
+	conn io.Writer,
 	config config.Config,
 	args []string,
 ) {
@@ -26,7 +26,7 @@ func (c *ConfigCommand) handleGet(
 
 func (c *ConfigCommand) handleGetDir(
 	ctx context.Context,
-	conn net.Conn,
+	conn io.Writer,
 	config config.Config,
 	args []string,
 ) {
@@ -40,7 +40,7 @@ func (c *ConfigCommand) handleGetDir(
 
 func (c *ConfigCommand) handleGetDbFile(
 	ctx context.Context,
-	conn net.Conn,
+	conn io.Writer,
 	config config.Config,
 	args []string,
 ) {
