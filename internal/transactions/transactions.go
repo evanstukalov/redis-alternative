@@ -25,6 +25,11 @@ type TransactionBuffer struct {
 	mu             sync.Mutex
 }
 
+type Transactions struct {
+	Values map[net.Conn]*TransactionBuffer
+	mu     sync.Mutex
+}
+
 func NewTransactionBuffer() *TransactionBuffer {
 	logrus.Info("Creating new transaction buffer")
 
@@ -33,7 +38,22 @@ func NewTransactionBuffer() *TransactionBuffer {
 	}
 }
 
+func NewTransaction() *Transactions {
+	logrus.Info("Creating new transactions obj")
+
+	return &Transactions{
+		Values: make(map[net.Conn]*TransactionBuffer),
+	}
+}
+
+func (t *Transactions) AddConnection(conn net.Conn) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.Values[conn] = NewTransactionBuffer()
+}
+
 func (t *TransactionBuffer) StartTransaction() {
+	logrus.Info("Starting transaction")
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.Active = true

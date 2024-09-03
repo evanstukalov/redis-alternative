@@ -5,13 +5,13 @@ import (
 	"log"
 )
 
-func GetTransactionBufferObj(ctx context.Context) *TransactionBuffer {
-	transactionBufferFromContext := ctx.Value("transactionBuffer")
-	if transactionBufferFromContext != nil {
-		if transactionBuffer, ok := transactionBufferFromContext.(*TransactionBuffer); !ok {
-			log.Fatalf("Expected *master.TransactionBuffer, got %T", transactionBufferFromContext)
+func GetTransactionsObj(ctx context.Context) *Transactions {
+	transactionFromContext := ctx.Value("transactions")
+	if transactionFromContext != nil {
+		if transactions, ok := transactionFromContext.(*Transactions); !ok {
+			log.Fatalf("Expected *master.Transaction, got %T", transactionFromContext)
 		} else {
-			return transactionBuffer
+			return transactions
 		}
 	}
 	return nil

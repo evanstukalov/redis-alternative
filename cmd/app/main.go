@@ -50,12 +50,12 @@ func main() {
 	storeObj := store.NewStore()
 	expiredCollector := store.NewExpiredCollector(storeObj)
 	clients := clients.NewClients()
-	transactionBuffer := transactions.NewTransactionBuffer()
+	transaction := transactions.NewTransaction()
 
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, "store", storeObj)
 	ctx = context.WithValue(ctx, "clients", clients)
-	ctx = context.WithValue(ctx, "transactionBuffer", transactionBuffer)
+	ctx = context.WithValue(ctx, "transactions", transaction)
 
 	address := fmt.Sprintf("0.0.0.0:%d", cfg.Port)
 
@@ -99,6 +99,9 @@ func main() {
 	for {
 		select {
 		case conn := <-connChan:
+
+			transcationObj := transactions.GetTransactionsObj(ctx)
+			transcationObj.AddConnection(conn)
 
 			go master.ReadFromConnection(ctx, conn, cfg)
 

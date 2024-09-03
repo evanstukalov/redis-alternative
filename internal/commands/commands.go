@@ -57,21 +57,23 @@ func (c *ExecCommand) Execute(
 	config config.Config,
 	args []string,
 ) {
-	transactionsObj := transactions.GetTransactionBufferObj(ctx)
+	transactionsObj := transactions.GetTransactionsObj(ctx)
 
-	if !transactionsObj.IsTransactionActive() {
+	transactionBufferObj := transactionsObj.Values[conn]
+
+	if !transactionBufferObj.IsTransactionActive() {
 		conn.Write([]byte("-ERR EXEC without MULTI\r\n"))
 		return
 	}
 
-	if transactionsObj.IsBufferEmpty() {
+	if transactionBufferObj.IsBufferEmpty() {
 		conn.Write([]byte("*0\r\n"))
 
-		transactionsObj.EndTransaction()
+		transactionBufferObj.EndTransaction()
 		return
 	}
 
-	commands := transactionsObj.PopCommands()
+	commands := transactionBufferObj.PopCommands()
 
 	for _, command := range commands {
 		args := command.Args
@@ -79,7 +81,7 @@ func (c *ExecCommand) Execute(
 		cmd.Execute(ctx, conn, config, args)
 	}
 
-	transactionsObj.EndTransaction()
+	transactionBufferObj.EndTransaction()
 
 	conn.Write([]byte("+OK\r\n"))
 	return
@@ -93,8 +95,10 @@ func (c *MultiCommand) Execute(
 	config config.Config,
 	args []string,
 ) {
-	transactionObj := transactions.GetTransactionBufferObj(ctx)
-	transactionObj.StartTransaction()
+	transactionsObj := transactions.GetTransactionsObj(ctx)
+	transactionBufferObj := transactionsObj.Values[conn]
+
+	transactionBufferObj.StartTransaction()
 
 	conn.Write([]byte("+OK\r\n"))
 }

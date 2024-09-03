@@ -61,10 +61,12 @@ func HandleCommand(ctx context.Context, conn net.Conn, config config.Config, arg
 		"conn":     conn.RemoteAddr().String(),
 	}).Info()
 
-	transactionsObj := transactions.GetTransactionBufferObj(ctx)
+	transactionsObj := transactions.GetTransactionsObj(ctx)
+	transactionBufferObj := transactionsObj.Values[conn]
 
-	if _, ok := cmd.(*commands.ExecCommand); !ok && transactionsObj.IsTransactionActive(){
-		transactionsObj.PutCommand(&transactions.BufferedCommand{
+	if _, ok := cmd.(*commands.ExecCommand); !ok && transactionBufferObj.IsTransactionActive() {
+
+		transactionBufferObj.PutCommand(&transactions.BufferedCommand{
 			CMD:  cmd,
 			Args: args,
 		})
