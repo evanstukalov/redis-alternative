@@ -11,7 +11,6 @@ import (
 	"github.com/codecrafters-io/redis-starter-go/internal/commands"
 	"github.com/codecrafters-io/redis-starter-go/internal/config"
 	"github.com/codecrafters-io/redis-starter-go/internal/redis"
-	"github.com/codecrafters-io/redis-starter-go/internal/transactions"
 	"github.com/codecrafters-io/redis-starter-go/internal/utils"
 )
 
@@ -48,12 +47,6 @@ func ReadFromConnection(ctx context.Context, conn net.Conn, config config.Config
 }
 
 func HandleCommand(ctx context.Context, conn net.Conn, config config.Config, args []string) {
-	cmd, exists := commands.Commands[strings.ToUpper(args[0])]
-	if !exists {
-		conn.Write([]byte("-Error\r\n"))
-		return
-	}
-
 	log.WithFields(log.Fields{
 		"package":  "master",
 		"function": "HandleCommand",
@@ -61,17 +54,20 @@ func HandleCommand(ctx context.Context, conn net.Conn, config config.Config, arg
 		"conn":     conn.RemoteAddr().String(),
 	}).Info()
 
-	transactionsObj := transactions.GetTransactionsObj(ctx)
-	transactionBufferObj := transactionsObj.Values[conn]
+	cmd, exists := commands.Commands[strings.ToUpper(args[0])]
+	if !exists {
+		conn.Write([]byte("-Error\r\n"))
+		return
+	}
 
-	if _, ok := cmd.(*commands.ExecCommand); !ok && transactionBufferObj.IsTransactionActive() {
+	baseCommandHandler := &BaseCommandHandler{}
+	discardConditionHandler := &DiscardConditionHandler{}
+	queuedConditionHandler := &QueuedConditionHandler{}
 
-		transactionBufferObj.PutCommand(&transactions.BufferedCommand{
-			CMD:  cmd,
-			Args: args,
-		})
+	baseCommandHandler.SetNext(discardConditionHandler)
+	discardConditionHandler.SetNext(queuedConditionHandler)
 
-		conn.Write([]byte("+QUEUED\r\n"))
+	if !baseCommandHandler.Handle(ctx, conn, config, args, cmd) {
 		return
 	}
 

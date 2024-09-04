@@ -65,7 +65,7 @@ func (c *DiscardCommand) Execute(
 	if conn, ok := conn.(net.Conn); ok {
 		transactionBufferObj := transactionsObj.GetTransactionBuffer(conn)
 
-		if transactionBufferObj.IsTransactionActive() {
+		if !transactionBufferObj.IsTransactionActive() {
 			conn.Write([]byte("-ERR DISCARD without MULTI\r\n"))
 			return
 		}
