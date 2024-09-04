@@ -53,6 +53,12 @@ func (t *Transactions) AddConnection(conn net.Conn) {
 	t.Values[conn] = NewTransactionBuffer()
 }
 
+func (t *Transactions) GetTransactionBuffer(conn net.Conn) *TransactionBuffer {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	return t.Values[conn]
+}
+
 func (t *TransactionBuffer) StartTransaction() {
 	logrus.Info("Starting transaction")
 	t.mu.Lock()
@@ -88,10 +94,16 @@ func (t *TransactionBuffer) IsBufferEmpty() bool {
 	return result
 }
 
-func (t *TransactionBuffer) EndTransaction() {
-	logrus.Info("Ending transaction")
+func (t *TransactionBuffer) InActivateTransaction() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	t.Active = false
+}
+
+func (t *TransactionBuffer) DiscardTransaction() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	t.CommandsBuffer = make([]*BufferedCommand, 0, 8)
 	t.Active = false
 }
 

@@ -49,6 +49,30 @@ var Commands = map[string]Command{
 	"INCR":     &IncrCommand{},
 	"MULTI":    &MultiCommand{},
 	"EXEC":     &ExecCommand{},
+	"DISCARD":  &DiscardCommand{},
+}
+
+type DiscardCommand struct{}
+
+func (c *DiscardCommand) Execute(
+	ctx context.Context,
+	conn io.Writer,
+	config config.Config,
+	args []string,
+) {
+	transactionsObj := transactions.GetTransactionsObj(ctx)
+
+	if conn, ok := conn.(net.Conn); ok {
+		transactionBufferObj := transactionsObj.GetTransactionBuffer(conn)
+
+		if transactionBufferObj.IsTransactionActive() {
+			conn.Write([]byte("-ERR DISCARD without MULTI\r\n"))
+			return
+		}
+
+		transactionBufferObj.DiscardTransaction()
+		conn.Write([]byte("+OK\r\n"))
+	}
 }
 
 type ExecCommand struct{}
@@ -77,7 +101,7 @@ func (c *ExecCommand) Execute(
 		if transactionBufferObj.IsBufferEmpty() {
 			conn.Write([]byte("*0\r\n"))
 
-			transactionBufferObj.EndTransaction()
+			transactionBufferObj.InActivateTransaction()
 			return
 		}
 
@@ -93,7 +117,7 @@ func (c *ExecCommand) Execute(
 			}
 		}
 
-		transactionBufferObj.EndTransaction()
+		transactionBufferObj.InActivateTransaction()
 	}
 
 	result := fmt.Sprintf("*%d\r\n%s", lenCommands, buffer.String())
