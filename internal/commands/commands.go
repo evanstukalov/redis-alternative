@@ -50,8 +50,25 @@ var Commands = map[string]Command{
 	"MULTI":    &MultiCommand{},
 	"EXEC":     &ExecCommand{},
 	"DISCARD":  &DiscardCommand{},
+	"TYPE":     &TypeCommand{},
 }
 
+/*
+The TYPE command returns the type of value stored at a given key.
+*/
+type TypeCommand struct{}
+
+func (c *TypeCommand) Execute(
+	ctx context.Context,
+	conn io.Writer,
+	config config.Config,
+	args []string,
+) {
+}
+
+/*
+The DISCARD command discards all commands issued after MULTI.
+*/
 type DiscardCommand struct{}
 
 func (c *DiscardCommand) Execute(
@@ -75,6 +92,9 @@ func (c *DiscardCommand) Execute(
 	}
 }
 
+/*
+The EXEC command executes all the previously queued commands issued with MULTI.
+*/
 type ExecCommand struct{}
 
 func (c *ExecCommand) Execute(
@@ -125,6 +145,9 @@ func (c *ExecCommand) Execute(
 	return
 }
 
+/*
+The MULTI command marks the start of a transaction block.
+*/
 type MultiCommand struct{}
 
 func (c *MultiCommand) Execute(
@@ -143,6 +166,9 @@ func (c *MultiCommand) Execute(
 	conn.Write([]byte("+OK\r\n"))
 }
 
+/*
+The INCR command increments the number stored at key by one.
+*/
 type IncrCommand struct{}
 
 func (c *IncrCommand) Execute(
@@ -168,6 +194,9 @@ func (c *IncrCommand) Execute(
 	conn.Write([]byte(fmt.Sprintf(":%d\r\n", value)))
 }
 
+/*
+The ECHO command returns a line of text to the client.
+*/
 type EchoCommand struct{}
 
 func (c *EchoCommand) Execute(
@@ -180,6 +209,9 @@ func (c *EchoCommand) Execute(
 	conn.Write([]byte(fmt.Sprintf("$%d\r\n%s\r\n", len(msg), msg)))
 }
 
+/*
+The PING command returns PONG.
+*/
 type PingCommand struct{}
 
 func (c *PingCommand) Execute(
@@ -194,6 +226,9 @@ func (c *PingCommand) Execute(
 	}
 }
 
+/*
+The SET command sets the string value of a key.
+*/
 type SetCommand struct{}
 
 func (c *SetCommand) Execute(
@@ -234,6 +269,9 @@ func (c *SetCommand) Execute(
 	}
 }
 
+/*
+The GET command returns the value associated with a key.
+*/
 type GetCommand struct{}
 
 func (c *GetCommand) Execute(
@@ -260,6 +298,9 @@ func (c *GetCommand) Execute(
 	}
 }
 
+/*
+The INFO command returns information and statistics about the server.
+*/
 type InfoCommand struct{}
 
 func (c *InfoCommand) Execute(
@@ -301,6 +342,9 @@ func (c *InfoCommand) Execute(
 	}
 }
 
+/*
+The REPLCONF command sets the configuration of the replication link.
+*/
 type ReplConfCommand struct{}
 
 func (c *ReplConfCommand) Execute(
@@ -319,6 +363,9 @@ func (c *ReplConfCommand) Execute(
 	}
 }
 
+/*
+The PSYNC command is used to synchronize replication.
+*/
 type PsyncCommand struct{}
 
 func (c *PsyncCommand) Execute(
@@ -352,6 +399,9 @@ func (c *PsyncCommand) Execute(
 	}
 }
 
+/*
+The WAIT command is used to wait for replication.
+*/
 type WaitCommand struct{}
 
 func (c *WaitCommand) Execute(
@@ -458,6 +508,9 @@ func (c *WaitCommand) Execute(
 	}
 }
 
+/*
+The CONFIG command is used to get or set configuration parameters.
+*/
 type ConfigCommand struct{}
 
 func (c *ConfigCommand) Execute(
@@ -479,6 +532,9 @@ func (c *ConfigCommand) Execute(
 	}
 }
 
+/*
+The KEYS command returns all keys that match the given pattern.
+*/
 type KeysCommand struct{}
 
 func (c *KeysCommand) Execute(
