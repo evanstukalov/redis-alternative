@@ -3,34 +3,11 @@ package store
 import (
 	"errors"
 	"strconv"
-	"sync"
 	"time"
 
 	"github.com/sirupsen/logrus"
 	log "github.com/sirupsen/logrus"
 )
-
-type Datatype string
-
-const (
-	StringType Datatype = "string"
-	StreamType Datatype = "stream"
-)
-
-type ValueWithType struct {
-	Value    string
-	DataType Datatype
-}
-
-type Value struct {
-	Value     ValueWithType
-	ExpiredAt *time.Time
-}
-
-type Store struct {
-	store map[string]Value
-	mutex sync.RWMutex
-}
 
 func NewStore() *Store {
 	logrus.Info("Creating new store")
@@ -56,6 +33,17 @@ func (s *Store) Set(key string, value string, px *int) {
 	}
 
 	log.Println("Set handler: ", key, value)
+}
+
+func (s *Store) XAdd(key string, value string) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	s.store[key] = Value{
+		Value: ValueWithType{Value: value, DataType: StreamType},
+	}
+
+	log.Println("XAdd handler: ", key, value)
 }
 
 func (s *Store) Get(key string) (string, error) {

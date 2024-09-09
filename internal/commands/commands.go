@@ -36,21 +36,54 @@ type CommandHandler func(
 var Propagated = [3]string{"SET", "DEL"}
 
 var Commands = map[string]Command{
-	"PING":     &PingCommand{},
-	"ECHO":     &EchoCommand{},
-	"SET":      &SetCommand{},
-	"GET":      &GetCommand{},
+	"PING": &PingCommand{},
+	"ECHO": &EchoCommand{},
+	"SET":  &SetCommand{},
+	"GET":  &GetCommand{},
+
 	"INFO":     &InfoCommand{},
 	"REPLCONF": &ReplConfCommand{},
 	"PSYNC":    &PsyncCommand{},
 	"WAIT":     &WaitCommand{},
-	"CONFIG":   &ConfigCommand{},
-	"KEYS":     &KeysCommand{},
-	"INCR":     &IncrCommand{},
-	"MULTI":    &MultiCommand{},
-	"EXEC":     &ExecCommand{},
-	"DISCARD":  &DiscardCommand{},
-	"TYPE":     &TypeCommand{},
+
+	"CONFIG": &ConfigCommand{},
+	"KEYS":   &KeysCommand{},
+	"INCR":   &IncrCommand{},
+
+	"MULTI":   &MultiCommand{},
+	"EXEC":    &ExecCommand{},
+	"DISCARD": &DiscardCommand{},
+
+	"TYPE": &TypeCommand{},
+	"XADD": &XADDCommand{},
+}
+
+/*
+The XADD command adds a new entry to a stream.
+*/
+type XADDCommand struct{}
+
+func (c *XADDCommand) Execute(
+	ctx context.Context,
+	conn io.Writer,
+	config config.Config,
+	args []string,
+) {
+	if len(args) < 3 {
+		log.Error("Missing arguments")
+		return
+	}
+	key := args[1]
+	id := args[2]
+	// value := args[3:]
+
+	// TODO
+	storeObj := utils.GetStoreObj(ctx)
+	storeObj.XAdd(key, id)
+
+	answerStr := fmt.Sprintf("$%d\r\n%s\r\n", len(id), id)
+
+	conn.Write([]byte(answerStr))
 }
 
 /*
