@@ -10,20 +10,32 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-type ValueWithExpiration struct {
-	value     string
+type Datatype string
+
+const (
+	StringType Datatype = "string"
+	StreamType Datatype = "stream"
+)
+
+type ValueWithType struct {
+	Value    string
+	DataType Datatype
+}
+
+type Value struct {
+	Value     ValueWithType
 	ExpiredAt *time.Time
 }
 
 type Store struct {
-	store map[string]ValueWithExpiration
+	store map[string]Value
 	mutex sync.RWMutex
 }
 
 func NewStore() *Store {
 	logrus.Info("Creating new store")
 	return &Store{
-		store: make(map[string]ValueWithExpiration),
+		store: make(map[string]Value),
 	}
 }
 
@@ -38,8 +50,8 @@ func (s *Store) Set(key string, value string, px *int) {
 		expirationTime = &t
 	}
 
-	s.store[key] = ValueWithExpiration{
-		value:     value,
+	s.store[key] = Value{
+		Value:     ValueWithType{Value: value, DataType: StringType},
 		ExpiredAt: expirationTime,
 	}
 
@@ -53,8 +65,19 @@ func (s *Store) Get(key string) (string, error) {
 	if value, ok := s.store[key]; !ok {
 		return "", errors.New("key does not exists")
 	} else {
-		log.Println("Get handler: ", key, value.value)
-		return value.value, nil
+		log.Println("Get handler: ", key, value.Value)
+		return value.Value.Value, nil
+	}
+}
+
+func (s *Store) GetType(key string) (Datatype, error) {
+	s.mutex.RLock()
+	defer s.mutex.RUnlock()
+
+	if value, ok := s.store[key]; !ok {
+		return "", errors.New("key does not exists")
+	} else {
+		return value.Value.DataType, nil
 	}
 }
 
@@ -65,20 +88,21 @@ func (s *Store) Incr(key string) (int, error) {
 
 	v, ok := s.store[key]
 	if !ok {
-		s.store[key] = ValueWithExpiration{
-			value: "1",
+		s.store[key] = Value{
+			ValueWithType{Value: "1", DataType: StringType},
+			nil,
 		}
 		return 1, nil
 	}
 
-	intValue, err := strconv.Atoi(v.value)
+	intValue, err := strconv.Atoi(v.Value.Value)
 	if err != nil {
 		return 0, errors.New("Unsupported type")
 	}
 
 	intValue++
-	s.store[key] = ValueWithExpiration{
-		value: strconv.Itoa(intValue),
+	s.store[key] = Value{
+		Value: ValueWithType{Value: strconv.Itoa(intValue)},
 	}
 	return intValue, nil
 }

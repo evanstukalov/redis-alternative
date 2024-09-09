@@ -64,6 +64,22 @@ func (c *TypeCommand) Execute(
 	config config.Config,
 	args []string,
 ) {
+	if len(args) < 2 {
+		log.Error("Missing arguments")
+		return
+	}
+
+	key := args[1]
+
+	storeObj := utils.GetStoreObj(ctx)
+
+	keyType, err := storeObj.GetType(key)
+	if err != nil {
+		conn.Write([]byte("+none\r\n"))
+		return
+	}
+
+	conn.Write([]byte(fmt.Sprintf("+%s\r\n", keyType)))
 }
 
 /*
