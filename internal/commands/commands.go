@@ -73,17 +73,21 @@ func (c *XADDCommand) Execute(
 		log.Error("Missing arguments")
 		return
 	}
-	key := args[1]
-	id := args[2]
-
-	streamMessage := store.StreamMessage{
-		ID: args[2],
-	}
-
-	storeObj := utils.GetStoreObj(ctx)
-	err := storeObj.XAdd(key, streamMessage)
 
 	var answerStr string
+
+	storeObj := utils.GetStoreObj(ctx)
+
+	key := args[1]
+
+	id, err := store.FormID(key, args[2], storeObj)
+
+	streamMessage := store.StreamMessage{
+		ID: id,
+	}
+
+	storeObj.XAdd(key, streamMessage)
+
 	if err != nil {
 		answerStr = fmt.Sprintf("-ERR %s\r\n", err.Error())
 	} else {

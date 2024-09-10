@@ -51,12 +51,6 @@ func (s *Store) XAdd(key string, streamValue StreamMessage) error {
 	}
 
 	streamMessages := value.Value.Value.(StreamMessages)
-	lastStreamMessage := streamMessages.Messages[len(streamMessages.Messages)-1]
-
-	err := compareIDs(streamValue.ID, lastStreamMessage.ID)
-	if err != nil {
-		return err
-	}
 
 	streamMessages.Messages = append(streamMessages.Messages, streamValue)
 
@@ -66,6 +60,20 @@ func (s *Store) XAdd(key string, streamValue StreamMessage) error {
 
 	log.Println("XAdd handler: ", key, streamValue)
 	return nil
+}
+
+func (s *Store) GetLastStreamID(keyStream string) (string, error) {
+	s.mutex.RLock()
+	defer s.mutex.RUnlock()
+
+	value, ok := s.store[keyStream]
+	if !ok {
+		return "0-1", errors.New("key does not exists")
+	}
+
+	id := value.Value.Value.(StreamMessages).Messages[len(value.Value.Value.(StreamMessages).Messages)-1].ID
+	logrus.Debug(id)
+	return id, nil
 }
 
 func (s *Store) Get(key string) (string, error) {

@@ -3,7 +3,37 @@ package store
 import (
 	"errors"
 	"strings"
+
+	"github.com/sirupsen/logrus"
 )
+
+func FormID(keyStream string, id string, store *Store) (string, error) {
+	logrus.Debug(keyStream, id)
+
+	lastStreamId, err := store.GetLastStreamID(keyStream)
+	if err != nil {
+		return lastStreamId, nil
+	}
+
+	if id == "*" {
+		// generate timestamp + lastvalue+1
+	}
+
+	p1, p2 := splitID(id)
+
+	if p2 == "*" {
+		p1, p2 = splitID(lastStreamId)
+	}
+
+	err = compareIDs(id, lastStreamId)
+	if err != nil {
+		return "", err
+	}
+
+	res := p1 + "-" + p2
+	logrus.Debug(res)
+	return res, nil
+}
 
 func splitID(id string) (string, string) {
 	parts := strings.Split(id, "-")

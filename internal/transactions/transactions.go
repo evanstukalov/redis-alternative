@@ -71,12 +71,6 @@ func (t *TransactionBuffer) IsTransactionActive() bool {
 	defer t.mu.Unlock()
 	result := t.Active
 
-	logrus.WithFields(logrus.Fields{
-		"package":  "transactions",
-		"function": "IsTransactionActive",
-		"result":   result,
-	}).Info()
-
 	return result
 }
 

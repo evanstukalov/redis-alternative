@@ -47,13 +47,6 @@ func ReadFromConnection(ctx context.Context, conn net.Conn, config config.Config
 }
 
 func HandleCommand(ctx context.Context, conn net.Conn, config config.Config, args []string) {
-	log.WithFields(log.Fields{
-		"package":  "master",
-		"function": "HandleCommand",
-		"cmd":      args,
-		"conn":     conn.RemoteAddr().String(),
-	}).Info()
-
 	cmd, exists := commands.Commands[strings.ToUpper(args[0])]
 	if !exists {
 		conn.Write([]byte("-Error\r\n"))
