@@ -5,8 +5,6 @@ import (
 	"io"
 	"net"
 
-	"github.com/sirupsen/logrus"
-
 	"github.com/codecrafters-io/redis-starter-go/internal/commands"
 	"github.com/codecrafters-io/redis-starter-go/internal/config"
 	"github.com/codecrafters-io/redis-starter-go/internal/transactions"
@@ -68,8 +66,6 @@ func (b *DiscardConditionHandler) Handle(
 	args []string,
 	cmd commands.Command,
 ) bool {
-	logrus.Info("Discard condition handler")
-
 	if _, ok := cmd.(*commands.DiscardCommand); ok {
 		cmd.Execute(ctx, conn, config, args)
 		return false
@@ -89,7 +85,6 @@ func (b *QueuedConditionHandler) Handle(
 	args []string,
 	cmd commands.Command,
 ) bool {
-	logrus.Info("Queued condition handler")
 	transactionsObj := transactions.GetTransactionsObj(ctx)
 	transactionBufferObj := transactionsObj.GetTransactionBuffer(conn.(net.Conn))
 

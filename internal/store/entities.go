@@ -12,8 +12,27 @@ const (
 	StreamType Datatype = "stream"
 )
 
+type Storable interface {
+	IsStorable()
+}
+
+type StringT string
+
+func (s StringT) IsStorable() {}
+
+type StreamMessages struct {
+	Messages []StreamMessage
+}
+
+type StreamMessage struct {
+	ID     string
+	Fields map[string]interface{}
+}
+
+func (s StreamMessages) IsStorable() {}
+
 type ValueWithType struct {
-	Value    string
+	Value    Storable
 	DataType Datatype
 }
 

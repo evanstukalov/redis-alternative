@@ -28,22 +28,44 @@ func (s *Store) Set(key string, value string, px *int) {
 	}
 
 	s.store[key] = Value{
-		Value:     ValueWithType{Value: value, DataType: StringType},
+		Value:     ValueWithType{Value: StringT(value), DataType: StringType},
 		ExpiredAt: expirationTime,
 	}
 
 	log.Println("Set handler: ", key, value)
 }
 
-func (s *Store) XAdd(key string, value string) {
+func (s *Store) XAdd(key string, streamValue StreamMessage) error {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	s.store[key] = Value{
-		Value: ValueWithType{Value: value, DataType: StreamType},
+	value, exists := s.store[key]
+	if !exists {
+		s.store[key] = Value{
+			Value: ValueWithType{
+				Value:    StreamMessages{Messages: []StreamMessage{streamValue}},
+				DataType: StreamType,
+			},
+		}
+		return nil
 	}
 
-	log.Println("XAdd handler: ", key, value)
+	streamMessages := value.Value.Value.(StreamMessages)
+	lastStreamMessage := streamMessages.Messages[len(streamMessages.Messages)-1]
+
+	err := compareIDs(streamValue.ID, lastStreamMessage.ID)
+	if err != nil {
+		return err
+	}
+
+	streamMessages.Messages = append(streamMessages.Messages, streamValue)
+
+	s.store[key] = Value{
+		Value: ValueWithType{Value: streamMessages, DataType: StreamType},
+	}
+
+	log.Println("XAdd handler: ", key, streamValue)
+	return nil
 }
 
 func (s *Store) Get(key string) (string, error) {
@@ -54,7 +76,11 @@ func (s *Store) Get(key string) (string, error) {
 		return "", errors.New("key does not exists")
 	} else {
 		log.Println("Get handler: ", key, value.Value)
-		return value.Value.Value, nil
+		if str, ok := value.Value.Value.(StringT); ok {
+			return string(str), nil
+		}
+
+		return "", errors.New("Value is not of type StringT")
 	}
 }
 
@@ -77,20 +103,20 @@ func (s *Store) Incr(key string) (int, error) {
 	v, ok := s.store[key]
 	if !ok {
 		s.store[key] = Value{
-			ValueWithType{Value: "1", DataType: StringType},
+			ValueWithType{Value: StringT("1"), DataType: StringType},
 			nil,
 		}
 		return 1, nil
 	}
 
-	intValue, err := strconv.Atoi(v.Value.Value)
+	intValue, err := strconv.Atoi(string(v.Value.Value.(StringT)))
 	if err != nil {
 		return 0, errors.New("Unsupported type")
 	}
 
 	intValue++
 	s.store[key] = Value{
-		Value: ValueWithType{Value: strconv.Itoa(intValue)},
+		Value: ValueWithType{Value: StringT(strconv.Itoa(intValue))},
 	}
 	return intValue, nil
 }

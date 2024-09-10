@@ -75,13 +75,20 @@ func (c *XADDCommand) Execute(
 	}
 	key := args[1]
 	id := args[2]
-	// value := args[3:]
 
-	// TODO
+	streamMessage := store.StreamMessage{
+		ID: args[2],
+	}
+
 	storeObj := utils.GetStoreObj(ctx)
-	storeObj.XAdd(key, id)
+	err := storeObj.XAdd(key, streamMessage)
 
-	answerStr := fmt.Sprintf("$%d\r\n%s\r\n", len(id), id)
+	var answerStr string
+	if err != nil {
+		answerStr = fmt.Sprintf("-ERR %s\r\n", err.Error())
+	} else {
+		answerStr = fmt.Sprintf("$%d\r\n%s\r\n", len(id), id)
+	}
 
 	conn.Write([]byte(answerStr))
 }
