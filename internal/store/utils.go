@@ -2,37 +2,102 @@ package store
 
 import (
 	"errors"
+	"fmt"
+	"regexp"
 	"strings"
+	"time"
 
 	"github.com/sirupsen/logrus"
 )
 
-func FormID(keyStream string, id string, store *Store) (string, error) {
-	logrus.Debug(keyStream, id)
+func reGroupOne(keyStream string, id string, store *Store) (string, error) {
+	logrus.WithFields(logrus.Fields{
+		"id": id,
+	}).Debug("Matches group")
 
-	lastStreamId, err := store.GetLastStreamID(keyStream)
+	lastStreamId, err := store.GetLastStreamID(keyStream, id)
 	if err != nil {
 		return lastStreamId, nil
 	}
 
-	if id == "*" {
-		// generate timestamp + lastvalue+1
-	}
-
-	p1, p2 := splitID(id)
-
-	if p2 == "*" {
-		p1, p2 = splitID(lastStreamId)
-	}
+	logrus.Debug("lastStreamId ", lastStreamId)
 
 	err = compareIDs(id, lastStreamId)
 	if err != nil {
 		return "", err
 	}
 
-	res := p1 + "-" + p2
-	logrus.Debug(res)
-	return res, nil
+	return id, nil
+}
+
+func reGroupTwo(keyStream string, id string, store *Store) (string, error) {
+	logrus.WithField("id", id).Debug("Matches group any sequence")
+
+	newTimestamp, _ := splitID(id)
+
+	defaultValue := fmt.Sprintf("%s-0", newTimestamp)
+
+	if newTimestamp == "0" {
+		defaultValue = "0-1"
+	}
+
+	lastStreamId, err := store.GetLastStreamID(keyStream, defaultValue)
+	if err != nil {
+		return lastStreamId, nil
+	}
+
+	lastTimestamp, _ := splitID(lastStreamId)
+
+	if newTimestamp != lastTimestamp {
+		id, err = store.CreateNewStreamID(keyStream, id)
+		if err != nil {
+			return "", err
+		}
+	} else {
+		id, err = store.IncrStreamID(keyStream)
+		if err != nil {
+			return "", err
+		}
+	}
+
+	logrus.Debug("result ID ", id)
+
+	return id, nil
+}
+
+func reGroupThree(keyStream string, id string, store *Store) (string, error) {
+	logrus.WithField("id", id).Debug("Matches group any")
+
+	timestamp := time.Now().UnixNano() / int64(time.Millisecond)
+
+	id = fmt.Sprintf("%d-%d", timestamp, 0)
+
+	return id, nil
+}
+
+func FormID(keyStream string, id string, store *Store) (string, error) {
+	logrus.Debug(keyStream, id)
+	logrus.Debug(store.store[keyStream].GetStorable())
+
+	reGroup := regexp.MustCompile(`^\d+-\d+$`)
+	reGroupAnySequence := regexp.MustCompile(`^\d+-\*$`)
+	reGroupAny := regexp.MustCompile(`^\*$`)
+
+	switch {
+	case reGroup.MatchString(id):
+		return reGroupOne(keyStream, id, store)
+
+	case reGroupAnySequence.MatchString(id):
+		return reGroupTwo(keyStream, id, store)
+
+	case reGroupAny.MatchString(id):
+		return reGroupThree(keyStream, id, store)
+		// generate timestamp + lastvalue+1
+	}
+
+	logrus.Info("No match")
+
+	return "", errors.New("ID format is not valid")
 }
 
 func splitID(id string) (string, string) {

@@ -82,16 +82,16 @@ func (c *XADDCommand) Execute(
 
 	id, err := store.FormID(key, args[2], storeObj)
 
-	streamMessage := store.StreamMessage{
-		ID: id,
-	}
-
-	storeObj.XAdd(key, streamMessage)
-
 	if err != nil {
 		answerStr = fmt.Sprintf("-ERR %s\r\n", err.Error())
 	} else {
 		answerStr = fmt.Sprintf("$%d\r\n%s\r\n", len(id), id)
+
+		streamMessage := store.StreamMessage{
+			ID: id,
+		}
+
+		storeObj.XAdd(key, streamMessage)
 	}
 
 	conn.Write([]byte(answerStr))

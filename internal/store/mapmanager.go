@@ -2,7 +2,9 @@ package store
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -28,7 +30,7 @@ func (s *Store) Set(key string, value string, px *int) {
 	}
 
 	s.store[key] = Value{
-		Value:     ValueWithType{Value: StringT(value), DataType: StringType},
+		ValueData: ValueWithType{Data: StringT(value), DataType: StringType},
 		ExpiredAt: expirationTime,
 	}
 
@@ -42,38 +44,71 @@ func (s *Store) XAdd(key string, streamValue StreamMessage) error {
 	value, exists := s.store[key]
 	if !exists {
 		s.store[key] = Value{
-			Value: ValueWithType{
-				Value:    StreamMessages{Messages: []StreamMessage{streamValue}},
+			ValueData: ValueWithType{
+				Data:     StreamMessages{Messages: []StreamMessage{streamValue}},
 				DataType: StreamType,
 			},
 		}
 		return nil
 	}
 
-	streamMessages := value.Value.Value.(StreamMessages)
-
+	streamMessages := value.ValueData.Data.(StreamMessages)
 	streamMessages.Messages = append(streamMessages.Messages, streamValue)
 
-	s.store[key] = Value{
-		Value: ValueWithType{Value: streamMessages, DataType: StreamType},
-	}
+	value.ValueData.Data = streamMessages
 
-	log.Println("XAdd handler: ", key, streamValue)
+	s.store[key] = value
+
 	return nil
 }
 
-func (s *Store) GetLastStreamID(keyStream string) (string, error) {
+func (s *Store) GetLastStreamID(keyStream string, defaultValue string) (string, error) {
 	s.mutex.RLock()
 	defer s.mutex.RUnlock()
+
+	value, ok := s.store[keyStream]
+	if !ok {
+		return defaultValue, errors.New("key does not exists")
+	}
+
+	logrus.Error(value.GetStorable())
+
+	id := value.GetStorable().(StreamMessages).Messages[len(value.GetStorable().(StreamMessages).Messages)-1].ID
+
+	return id, nil
+}
+
+func (s *Store) IncrStreamID(keyStream string) (string, error) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 
 	value, ok := s.store[keyStream]
 	if !ok {
 		return "0-1", errors.New("key does not exists")
 	}
 
-	id := value.Value.Value.(StreamMessages).Messages[len(value.Value.Value.(StreamMessages).Messages)-1].ID
-	logrus.Debug(id)
-	return id, nil
+	id := value.GetStorable().(StreamMessages).Messages[len(value.GetStorable().(StreamMessages).Messages)-1].ID
+
+	parts := strings.Split(id, "-")
+	lastValue, _ := strconv.Atoi(parts[1])
+	newID := fmt.Sprintf("%s-%d", parts[0], lastValue+1)
+
+	return newID, nil
+}
+
+func (s *Store) CreateNewStreamID(keyStream string, id string) (string, error) {
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+
+	_, ok := s.store[keyStream]
+	if !ok {
+		return "0-1", errors.New("key does not exists")
+	}
+
+	parts := strings.Split(id, "-")
+	newID := fmt.Sprintf("%s-%s", parts[0], "0")
+
+	return newID, nil
 }
 
 func (s *Store) Get(key string) (string, error) {
@@ -83,8 +118,8 @@ func (s *Store) Get(key string) (string, error) {
 	if value, ok := s.store[key]; !ok {
 		return "", errors.New("key does not exists")
 	} else {
-		log.Println("Get handler: ", key, value.Value)
-		if str, ok := value.Value.Value.(StringT); ok {
+		log.Println("Get handler: ", key, value.ValueData)
+		if str, ok := value.ValueData.Data.(StringT); ok {
 			return string(str), nil
 		}
 
@@ -99,7 +134,7 @@ func (s *Store) GetType(key string) (Datatype, error) {
 	if value, ok := s.store[key]; !ok {
 		return "", errors.New("key does not exists")
 	} else {
-		return value.Value.DataType, nil
+		return value.ValueData.DataType, nil
 	}
 }
 
@@ -111,20 +146,20 @@ func (s *Store) Incr(key string) (int, error) {
 	v, ok := s.store[key]
 	if !ok {
 		s.store[key] = Value{
-			ValueWithType{Value: StringT("1"), DataType: StringType},
+			ValueWithType{Data: StringT("1"), DataType: StringType},
 			nil,
 		}
 		return 1, nil
 	}
 
-	intValue, err := strconv.Atoi(string(v.Value.Value.(StringT)))
+	intValue, err := strconv.Atoi(string(v.ValueData.Data.(StringT)))
 	if err != nil {
 		return 0, errors.New("Unsupported type")
 	}
 
 	intValue++
 	s.store[key] = Value{
-		Value: ValueWithType{Value: StringT(strconv.Itoa(intValue))},
+		ValueData: ValueWithType{Data: StringT(strconv.Itoa(intValue))},
 	}
 	return intValue, nil
 }

@@ -32,13 +32,17 @@ type StreamMessage struct {
 func (s StreamMessages) IsStorable() {}
 
 type ValueWithType struct {
-	Value    Storable
+	Data     Storable
 	DataType Datatype
 }
 
 type Value struct {
-	Value     ValueWithType
+	ValueData ValueWithType
 	ExpiredAt *time.Time
+}
+
+func (v Value) GetStorable() Storable {
+	return v.ValueData.Data
 }
 
 type Store struct {
