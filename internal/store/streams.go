@@ -5,8 +5,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-
-	"github.com/sirupsen/logrus"
 )
 
 func (s *Store) XAdd(key string, streamValue StreamMessage) error {
@@ -34,7 +32,7 @@ func (s *Store) XAdd(key string, streamValue StreamMessage) error {
 	return nil
 }
 
-func (s *Store) GetStream(
+func (s *Store) GetStreamsRange(
 	key string,
 	rangeTargets [2]string,
 ) ([]StreamMessage, error) {
@@ -60,11 +58,37 @@ func (s *Store) GetStream(
 			indexTwo = binarySearch(value.GetStorable().(StreamMessages), rangeTargets[1])
 		}
 
-		logrus.Info("range targets", rangeTargets[0], rangeTargets[1])
-		logrus.Info("targets indexes", index, indexTwo)
-
 		return GetRangedMessages(value.GetStorable().(StreamMessages), index, indexTwo), nil
 
+	}
+}
+
+func (s *Store) GetStreamsExclusive(
+	key string,
+	target string,
+) ([]StreamMessage, error) {
+	s.mutex.RLock()
+	defer s.mutex.RUnlock()
+
+	if value, ok := s.store[key]; !ok {
+		return []StreamMessage{}, errors.New("key does not exists")
+	} else {
+
+		index := binarySearch(value.GetStorable().(StreamMessages), target)
+		lastIndex := len(value.GetStorable().(StreamMessages).Messages) - 1
+
+		if index == lastIndex {
+			return []StreamMessage{}, nil
+		}
+
+		if index == 0 {
+			index++
+		}
+		if index == -1 {
+			index = 0
+		}
+
+		return GetRangedMessages(value.GetStorable().(StreamMessages), index, len(value.GetStorable().(StreamMessages).Messages)-1), nil
 	}
 }
 

@@ -115,10 +115,17 @@ func (c *XReadCommand) Execute(
 	config config.Config,
 	args []string,
 ) {
-	numStreams := (len(args) - 2) / 2 // 2 or 1
+	var streamsIndex int
+	var numStreams int
+	var block bool
 
 	if args[1] == "block" {
-		numStreams += 2
+
+		streamsIndex = 4
+
+		block = true
+
+		numStreams = (len(args) - 4) / 2
 
 		timeSleep, err := strconv.Atoi(args[2])
 		if err != nil {
@@ -127,62 +134,59 @@ func (c *XReadCommand) Execute(
 		}
 
 		time.Sleep(time.Duration(timeSleep) * time.Millisecond)
+
+	} else {
+		streamsIndex = 2
+
+		numStreams = (len(args) - 2) / 2
 	}
 
-	logrus.Error(numStreams)
-
-	streamKeys := args[2 : 2+numStreams]
-	IDs := args[2+numStreams:]
-
-	logrus.Error(streamKeys, IDs)
+	streamKeys := args[streamsIndex : streamsIndex+numStreams]
+	IDs := args[streamsIndex+numStreams:]
 
 	storeObj := utils.GetStoreObj(ctx)
 
-	streams := make([][]store.StreamMessage, 0, numStreams)
+	var bb bytes.Buffer
 
-	for i := 0; i < numStreams; i++ {
-		s, err := storeObj.GetStream(streamKeys[i], [2]string{IDs[i], "+"})
+	type StreamPair struct {
+		streamKey string
+		id        string
+		messages  []store.StreamMessage
+	}
+
+	streamPairs := make([]StreamPair, 0, len(streamKeys))
+
+	for i := range streamKeys {
+		streamPairs = append(streamPairs, StreamPair{
+			streamKey: streamKeys[i],
+			id:        IDs[i],
+			messages:  make([]store.StreamMessage, 0, 8),
+		})
+	}
+
+	for index, streamPair := range streamPairs {
+
+		messages, err := storeObj.GetStreamsExclusive(streamPair.streamKey, streamPair.id)
 		if err != nil {
 			logrus.Error(err)
 			return
 		}
-		streams = append(streams, s)
-	}
 
-	logrus.Info(streams)
+		streamPairs[index].messages = messages
 
-	var bb bytes.Buffer
-	bb.Write([]byte(fmt.Sprintf("*%d\r\n", len(streamKeys))))
-
-	for i := 0; i < len(streams); i++ {
-
-		bb.Write([]byte(fmt.Sprintf("*2\r\n")))
-		// Name of stream
-		bb.Write([]byte(fmt.Sprintf("$%d\r\n%s\r\n", len(streamKeys[i]), streamKeys[i])))
-		// Number of elements in stream
-		bb.Write([]byte(fmt.Sprintf("*%d\r\n", len(streams[i]))))
-
-		// Each element in stream
-		for _, v := range streams[i] {
-			// static *2
-			bb.Write([]byte(fmt.Sprintf("*%d\r\n", 2)))
-			// ID
-			bb.Write([]byte(fmt.Sprintf("$%d\r\n%s\r\n", len(v.ID), v.ID)))
-
-			fields := v.Fields
-
-			logrus.Error("fields", fields)
-			// Fields
-			for k, v := range fields {
-				bb.Write([]byte(fmt.Sprintf("*%d\r\n", len(fields)*2)))
-
-				bb.Write([]byte(fmt.Sprintf("$%d\r\n%s\r\n", len(k), k)))
-				bb.Write([]byte(fmt.Sprintf("$%d\r\n%s\r\n", len(v), v)))
-			}
-
+		if block && len(messages) == 0 {
+			conn.Write([]byte("$-1\r\n"))
+			return
 		}
 	}
-	logrus.Debug(bb.String())
+
+	bb.WriteString(arrayResp(len(streamKeys)))
+
+	for _, streamPair := range streamPairs {
+		writeStreamMessage(&bb, streamPair.streamKey, streamPair.messages)
+	}
+
+	logrus.Error(bb.String())
 
 	conn.Write(bb.Bytes())
 }
@@ -207,7 +211,7 @@ func (c *XRangeCommand) Execute(
 	IDs := args[2:4]
 
 	storeObj := utils.GetStoreObj(ctx)
-	res, err := storeObj.GetStream(key, [2]string{IDs[0], IDs[1]})
+	res, err := storeObj.GetStreamsRange(key, [2]string{IDs[0], IDs[1]})
 	if err != nil {
 		logrus.Error(err)
 		return

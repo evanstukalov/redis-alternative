@@ -128,11 +128,21 @@ func isIDSmallerOrEqual(ms1, ms2, seq1, seq2 string) bool {
 }
 
 func binarySearch(messages StreamMessages, targetID string) int {
-	return sort.Search(len(messages.Messages), func(i int) bool {
+	i := sort.Search(len(messages.Messages), func(i int) bool {
 		return messages.Messages[i].ID >= targetID
 	})
+
+	if i < len(messages.Messages) && messages.Messages[i].ID == targetID {
+		return i
+	}
+	return -1
 }
 
 func GetRangedMessages(messages StreamMessages, i int, i2 int) []StreamMessage {
+	logrus.Info("Messages length ", len(messages.Messages))
+	logrus.Info("Messages: ", messages.Messages)
+	logrus.Info("i: ", i)
+	logrus.Info("i2: ", i2)
+
 	return messages.Messages[i : i2+1]
 }
