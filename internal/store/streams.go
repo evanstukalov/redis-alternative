@@ -45,8 +45,16 @@ func (s *Store) GetStream(
 		return []StreamMessage{}, errors.New("key does not exists")
 	} else {
 
-		index := binarySearch(value.GetStorable().(StreamMessages), rangeTargets[0])
-		indexTwo := binarySearch(value.GetStorable().(StreamMessages), rangeTargets[1])
+		var index int
+		var indexTwo int
+
+		if rangeTargets[0] == "-" {
+			index = 0
+		} else {
+			index = binarySearch(value.GetStorable().(StreamMessages), rangeTargets[0])
+		}
+
+		indexTwo = binarySearch(value.GetStorable().(StreamMessages), rangeTargets[1])
 
 		logrus.Info("range targets", rangeTargets[0], rangeTargets[1])
 		logrus.Info("targets indexes", index, indexTwo)
