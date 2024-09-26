@@ -2,9 +2,7 @@ package store
 
 import (
 	"errors"
-	"fmt"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/sirupsen/logrus"
@@ -35,80 +33,6 @@ func (s *Store) Set(key string, value string, px *int) {
 	}
 
 	log.Println("Set handler: ", key, value)
-}
-
-func (s *Store) XAdd(key string, streamValue StreamMessage) error {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-
-	value, exists := s.store[key]
-	if !exists {
-		s.store[key] = Value{
-			ValueData: ValueWithType{
-				Data:     StreamMessages{Messages: []StreamMessage{streamValue}},
-				DataType: StreamType,
-			},
-		}
-		return nil
-	}
-
-	streamMessages := value.ValueData.Data.(StreamMessages)
-	streamMessages.Messages = append(streamMessages.Messages, streamValue)
-
-	value.ValueData.Data = streamMessages
-
-	s.store[key] = value
-
-	return nil
-}
-
-func (s *Store) GetLastStreamID(keyStream string, defaultValue string) (string, error) {
-	s.mutex.RLock()
-	defer s.mutex.RUnlock()
-
-	value, ok := s.store[keyStream]
-	if !ok {
-		return defaultValue, errors.New("key does not exists")
-	}
-
-	logrus.Error(value.GetStorable())
-
-	id := value.GetStorable().(StreamMessages).Messages[len(value.GetStorable().(StreamMessages).Messages)-1].ID
-
-	return id, nil
-}
-
-func (s *Store) IncrStreamID(keyStream string) (string, error) {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-
-	value, ok := s.store[keyStream]
-	if !ok {
-		return "0-1", errors.New("key does not exists")
-	}
-
-	id := value.GetStorable().(StreamMessages).Messages[len(value.GetStorable().(StreamMessages).Messages)-1].ID
-
-	parts := strings.Split(id, "-")
-	lastValue, _ := strconv.Atoi(parts[1])
-	newID := fmt.Sprintf("%s-%d", parts[0], lastValue+1)
-
-	return newID, nil
-}
-
-func (s *Store) CreateNewStreamID(keyStream string, id string) (string, error) {
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
-
-	_, ok := s.store[keyStream]
-	if !ok {
-		return "0-1", errors.New("key does not exists")
-	}
-
-	parts := strings.Split(id, "-")
-	newID := fmt.Sprintf("%s-%s", parts[0], "0")
-
-	return newID, nil
 }
 
 func (s *Store) Get(key string) (string, error) {

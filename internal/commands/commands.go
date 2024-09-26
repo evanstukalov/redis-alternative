@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/sirupsen/logrus"
 	log "github.com/sirupsen/logrus"
 
 	"github.com/codecrafters-io/redis-starter-go/internal/clients"
@@ -54,8 +55,9 @@ var Commands = map[string]Command{
 	"EXEC":    &ExecCommand{},
 	"DISCARD": &DiscardCommand{},
 
-	"TYPE": &TypeCommand{},
-	"XADD": &XADDCommand{},
+	"TYPE":   &TypeCommand{},
+	"XADD":   &XADDCommand{},
+	"XRANGE": &XRangeCommand{},
 }
 
 /*
@@ -82,19 +84,73 @@ func (c *XADDCommand) Execute(
 
 	id, err := store.FormID(key, args[2], storeObj)
 
+	fields := make(map[string]string)
+
+	for i := 3; i < len(args); i += 2 {
+		fields[args[i]] = args[i+1]
+	}
+
 	if err != nil {
 		answerStr = fmt.Sprintf("-ERR %s\r\n", err.Error())
 	} else {
 		answerStr = fmt.Sprintf("$%d\r\n%s\r\n", len(id), id)
 
 		streamMessage := store.StreamMessage{
-			ID: id,
+			ID:     id,
+			Fields: fields,
 		}
 
 		storeObj.XAdd(key, streamMessage)
 	}
 
 	conn.Write([]byte(answerStr))
+}
+
+type XRangeCommand struct{}
+
+func (c *XRangeCommand) Execute(
+	ctx context.Context,
+	conn io.Writer,
+	config config.Config,
+	args []string,
+) {
+	if len(args) < 3 {
+		log.Error("Missing arguments")
+		return
+	}
+
+	key := args[1]
+	IDs := args[2:4]
+
+	storeObj := utils.GetStoreObj(ctx)
+	res, err := storeObj.GetStream(key, [2]string{IDs[0], IDs[1]})
+	if err != nil {
+		logrus.Error(err)
+		return
+	}
+
+	logrus.Debug(res)
+
+	ans := fmt.Sprintf("*%d\r\n", len(res))
+	// TODO: сделай через StringBuilder
+
+	for _, v := range res {
+		logrus.Error("ID: " + v.ID)
+		ans += fmt.Sprintf("*2\r\n")
+		ans += fmt.Sprintf("$%d\r\n%s\r\n", len(v.ID), v.ID)
+		ans += fmt.Sprintf("*%d\r\n", len(v.Fields)*2)
+
+		logrus.Error(v.Fields)
+
+		for k, v := range v.Fields {
+			logrus.Error(k + ": " + v)
+			ans += fmt.Sprintf("$%d\r\n%s\r\n", len(k), k)
+			ans += fmt.Sprintf("$%d\r\n%s\r\n", len(v), v)
+		}
+
+	}
+
+	conn.Write([]byte(ans))
 }
 
 /*

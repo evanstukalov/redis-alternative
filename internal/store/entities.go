@@ -26,7 +26,7 @@ type StreamMessages struct {
 
 type StreamMessage struct {
 	ID     string
-	Fields map[string]interface{}
+	Fields map[string]string
 }
 
 func (s StreamMessages) IsStorable() {}

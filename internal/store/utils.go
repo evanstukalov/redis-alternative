@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
@@ -65,7 +66,7 @@ func reGroupTwo(keyStream string, id string, store *Store) (string, error) {
 	return id, nil
 }
 
-func reGroupThree(keyStream string, id string, store *Store) (string, error) {
+func reGroupThree(id string) (string, error) {
 	logrus.WithField("id", id).Debug("Matches group any")
 
 	timestamp := time.Now().UnixNano() / int64(time.Millisecond)
@@ -91,7 +92,7 @@ func FormID(keyStream string, id string, store *Store) (string, error) {
 		return reGroupTwo(keyStream, id, store)
 
 	case reGroupAny.MatchString(id):
-		return reGroupThree(keyStream, id, store)
+		return reGroupThree(id)
 		// generate timestamp + lastvalue+1
 	}
 
@@ -124,4 +125,14 @@ func compareIDs(id1 string, id2 string) error {
 
 func isIDSmallerOrEqual(ms1, ms2, seq1, seq2 string) bool {
 	return ms1 < ms2 || (ms1 == ms2 && seq1 <= seq2)
+}
+
+func binarySearch(messages StreamMessages, targetID string) int {
+	return sort.Search(len(messages.Messages), func(i int) bool {
+		return messages.Messages[i].ID >= targetID
+	})
+}
+
+func GetRangedMessages(messages StreamMessages, i int, i2 int) []StreamMessage {
+	return messages.Messages[i : i2+1]
 }
