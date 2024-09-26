@@ -54,7 +54,11 @@ func (s *Store) GetStream(
 			index = binarySearch(value.GetStorable().(StreamMessages), rangeTargets[0])
 		}
 
-		indexTwo = binarySearch(value.GetStorable().(StreamMessages), rangeTargets[1])
+		if rangeTargets[1] == "+" {
+			indexTwo = len(value.GetStorable().(StreamMessages).Messages) - 1
+		} else {
+			indexTwo = binarySearch(value.GetStorable().(StreamMessages), rangeTargets[1])
+		}
 
 		logrus.Info("range targets", rangeTargets[0], rangeTargets[1])
 		logrus.Info("targets indexes", index, indexTwo)
