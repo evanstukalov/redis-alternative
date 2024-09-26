@@ -129,28 +129,23 @@ func (c *XRangeCommand) Execute(
 		return
 	}
 
-	logrus.Debug(res)
+	var bb bytes.Buffer
 
-	ans := fmt.Sprintf("*%d\r\n", len(res))
-	// TODO: сделай через StringBuilder
+	bb.Write([]byte(fmt.Sprintf("*%d\r\n", len(res))))
 
 	for _, v := range res {
-		logrus.Error("ID: " + v.ID)
-		ans += fmt.Sprintf("*2\r\n")
-		ans += fmt.Sprintf("$%d\r\n%s\r\n", len(v.ID), v.ID)
-		ans += fmt.Sprintf("*%d\r\n", len(v.Fields)*2)
-
-		logrus.Error(v.Fields)
+		bb.Write([]byte(fmt.Sprintf("*2\r\n")))
+		bb.Write([]byte(fmt.Sprintf("$%d\r\n%s\r\n", len(v.ID), v.ID)))
+		bb.Write([]byte(fmt.Sprintf("*%d\r\n", len(v.Fields)*2)))
 
 		for k, v := range v.Fields {
 			logrus.Error(k + ": " + v)
-			ans += fmt.Sprintf("$%d\r\n%s\r\n", len(k), k)
-			ans += fmt.Sprintf("$%d\r\n%s\r\n", len(v), v)
+			bb.Write([]byte(fmt.Sprintf("$%d\r\n%s\r\n", len(k), k)))
+			bb.Write([]byte(fmt.Sprintf("$%d\r\n%s\r\n", len(v), v)))
 		}
-
 	}
 
-	conn.Write([]byte(ans))
+	conn.Write(bb.Bytes())
 }
 
 /*
