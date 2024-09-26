@@ -56,16 +56,17 @@ var Commands = map[string]Command{
 	"DISCARD": &DiscardCommand{},
 
 	"TYPE":   &TypeCommand{},
-	"XADD":   &XADDCommand{},
+	"XADD":   &XAddCommand{},
+	"XREAD":  &XReadCommand{},
 	"XRANGE": &XRangeCommand{},
 }
 
 /*
 The XADD command adds a new entry to a stream.
 */
-type XADDCommand struct{}
+type XAddCommand struct{}
 
-func (c *XADDCommand) Execute(
+func (c *XAddCommand) Execute(
 	ctx context.Context,
 	conn io.Writer,
 	config config.Config,
@@ -106,6 +107,57 @@ func (c *XADDCommand) Execute(
 	conn.Write([]byte(answerStr))
 }
 
+type XReadCommand struct{}
+
+func (c *XReadCommand) Execute(
+	ctx context.Context,
+	conn io.Writer,
+	config config.Config,
+	args []string,
+) {
+	if len(args) < 3 {
+		log.Error("Missing arguments")
+		return
+	}
+
+	key := args[2]
+	ID := args[3]
+
+	storeObj := utils.GetStoreObj(ctx)
+
+	res, err := storeObj.GetStream(key, [2]string{ID, "+"})
+	if err != nil {
+		logrus.Error(err)
+		return
+	}
+
+	logrus.Error(res)
+
+	var bb bytes.Buffer
+	bb.Write([]byte(fmt.Sprintf("*%d\r\n", 1)))
+	bb.Write([]byte(fmt.Sprintf("*2\r\n")))
+	bb.Write([]byte(fmt.Sprintf("$%d\r\n%s\r\n", len(key), key)))
+	bb.Write([]byte(fmt.Sprintf("*%d\r\n", len(res))))
+	bb.Write([]byte(fmt.Sprintf("*2\r\n")))
+
+	for _, v := range res {
+		bb.Write([]byte(fmt.Sprintf("$%d\r\n%s\r\n", len(v.ID), v.ID)))
+		bb.Write([]byte(fmt.Sprintf("*%d\r\n", len(v.Fields)*2)))
+
+		for k, v := range v.Fields {
+			bb.Write([]byte(fmt.Sprintf("$%d\r\n%s\r\n", len(k), k)))
+			bb.Write([]byte(fmt.Sprintf("$%d\r\n%s\r\n", len(v), v)))
+		}
+	}
+
+	logrus.Debug(bb.String())
+
+	conn.Write(bb.Bytes())
+}
+
+/*
+The XRANGE command returns a range of elements from a stream.
+*/
 type XRangeCommand struct{}
 
 func (c *XRangeCommand) Execute(
