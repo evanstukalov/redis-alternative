@@ -115,41 +115,73 @@ func (c *XReadCommand) Execute(
 	config config.Config,
 	args []string,
 ) {
-	if len(args) < 3 {
-		log.Error("Missing arguments")
-		return
+	numStreams := (len(args) - 2) / 2 // 2 or 1
+
+	if args[1] == "block" {
+		numStreams += 2
+
+		timeSleep, err := strconv.Atoi(args[2])
+		if err != nil {
+			logrus.Error(err)
+			return
+		}
+
+		time.Sleep(time.Duration(timeSleep) * time.Millisecond)
 	}
 
-	key := args[2]
-	ID := args[3]
+	logrus.Error(numStreams)
+
+	streamKeys := args[2 : 2+numStreams]
+	IDs := args[2+numStreams:]
+
+	logrus.Error(streamKeys, IDs)
 
 	storeObj := utils.GetStoreObj(ctx)
 
-	res, err := storeObj.GetStream(key, [2]string{ID, "+"})
-	if err != nil {
-		logrus.Error(err)
-		return
+	streams := make([][]store.StreamMessage, 0, numStreams)
+
+	for i := 0; i < numStreams; i++ {
+		s, err := storeObj.GetStream(streamKeys[i], [2]string{IDs[i], "+"})
+		if err != nil {
+			logrus.Error(err)
+			return
+		}
+		streams = append(streams, s)
 	}
 
-	logrus.Error(res)
+	logrus.Info(streams)
 
 	var bb bytes.Buffer
-	bb.Write([]byte(fmt.Sprintf("*%d\r\n", 1)))
-	bb.Write([]byte(fmt.Sprintf("*2\r\n")))
-	bb.Write([]byte(fmt.Sprintf("$%d\r\n%s\r\n", len(key), key)))
-	bb.Write([]byte(fmt.Sprintf("*%d\r\n", len(res))))
-	bb.Write([]byte(fmt.Sprintf("*2\r\n")))
+	bb.Write([]byte(fmt.Sprintf("*%d\r\n", len(streamKeys))))
 
-	for _, v := range res {
-		bb.Write([]byte(fmt.Sprintf("$%d\r\n%s\r\n", len(v.ID), v.ID)))
-		bb.Write([]byte(fmt.Sprintf("*%d\r\n", len(v.Fields)*2)))
+	for i := 0; i < len(streams); i++ {
 
-		for k, v := range v.Fields {
-			bb.Write([]byte(fmt.Sprintf("$%d\r\n%s\r\n", len(k), k)))
-			bb.Write([]byte(fmt.Sprintf("$%d\r\n%s\r\n", len(v), v)))
+		bb.Write([]byte(fmt.Sprintf("*2\r\n")))
+		// Name of stream
+		bb.Write([]byte(fmt.Sprintf("$%d\r\n%s\r\n", len(streamKeys[i]), streamKeys[i])))
+		// Number of elements in stream
+		bb.Write([]byte(fmt.Sprintf("*%d\r\n", len(streams[i]))))
+
+		// Each element in stream
+		for _, v := range streams[i] {
+			// static *2
+			bb.Write([]byte(fmt.Sprintf("*%d\r\n", 2)))
+			// ID
+			bb.Write([]byte(fmt.Sprintf("$%d\r\n%s\r\n", len(v.ID), v.ID)))
+
+			fields := v.Fields
+
+			logrus.Error("fields", fields)
+			// Fields
+			for k, v := range fields {
+				bb.Write([]byte(fmt.Sprintf("*%d\r\n", len(fields)*2)))
+
+				bb.Write([]byte(fmt.Sprintf("$%d\r\n%s\r\n", len(k), k)))
+				bb.Write([]byte(fmt.Sprintf("$%d\r\n%s\r\n", len(v), v)))
+			}
+
 		}
 	}
-
 	logrus.Debug(bb.String())
 
 	conn.Write(bb.Bytes())
