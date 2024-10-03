@@ -51,11 +51,13 @@ func main() {
 	expiredCollector := store.NewExpiredCollector(storeObj)
 	clients := clients.NewClients()
 	transaction := transactions.NewTransaction()
+	blockCh := make(chan struct{})
 
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, "store", storeObj)
 	ctx = context.WithValue(ctx, "clients", clients)
 	ctx = context.WithValue(ctx, "transactions", transaction)
+	ctx = context.WithValue(ctx, "blockCh", blockCh)
 
 	address := fmt.Sprintf("0.0.0.0:%d", cfg.Port)
 

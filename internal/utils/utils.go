@@ -8,6 +8,18 @@ import (
 	"github.com/codecrafters-io/redis-starter-go/internal/store"
 )
 
+func GetBlockChObj(ctx context.Context) chan struct{} {
+	blockChFromContext := ctx.Value("blockCh")
+	if blockChFromContext != nil {
+		if blockCh, ok := blockChFromContext.(chan struct{}); !ok {
+			log.Fatalf("Expected chan struct{}, got %T", blockChFromContext)
+		} else {
+			return blockCh
+		}
+	}
+	return nil
+}
+
 func GetClientsObj(ctx context.Context) *clients.Clients {
 	clientsFromContext := ctx.Value("clients")
 	if clientsFromContext != nil {

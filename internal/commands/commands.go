@@ -104,6 +104,17 @@ func (c *XAddCommand) Execute(
 		storeObj.XAdd(key, streamMessage)
 	}
 
+	logrus.Debug("XADD BEFORE SELECT")
+
+	blockCh := utils.GetBlockChObj(ctx)
+
+	select {
+	case blockCh <- struct{}{}:
+	default:
+	}
+
+	logrus.Debug("XADD AFTER SELECT")
+
 	conn.Write([]byte(answerStr))
 }
 
@@ -134,6 +145,18 @@ func (c *XReadCommand) Execute(
 		}
 
 		time.Sleep(time.Duration(timeSleep) * time.Millisecond)
+
+		if args[2] == "0" {
+			blockCh := utils.GetBlockChObj(ctx)
+			<-blockCh
+
+			// блокируем горутину, пока не получим сообщения XADD из другого потока
+			// получаем из ctx канал и ждем из него сообщения
+			// в XADD добавляем значение в канал
+			// тем самым разблокируем эту горутину
+			// но как быть если XADD нужно не всегда что-то отправлять в канал ?
+			// select {} где case ch <- "XADD" либо default
+		}
 
 	} else {
 		streamsIndex = 2
