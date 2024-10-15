@@ -8,7 +8,7 @@ import (
 	"net"
 	"strings"
 
-	"github.com/codecrafters-io/redis-starter-go/internal/config"
+	"github.com/codecrafters-io/redis-starter-go/internal/interfaces"
 )
 
 type MasterInfo struct {
@@ -53,7 +53,6 @@ func readAnswer(
 		fmt.Println("Error reading from connection: ", err.Error())
 		return
 	}
-	// fmt.Println(message)
 }
 
 func readNBytes(reader io.Reader, n int) ([]byte, error) {
@@ -65,8 +64,8 @@ func readNBytes(reader io.Reader, n int) ([]byte, error) {
 	return buf, nil
 }
 
-func ConnectMaster(replicaof string, config config.Config) (net.Conn, error) {
-	masterInfo := masterInfoFromParam(replicaof)
+func ConnectMaster(config interfaces.IConfig) (net.Conn, error) {
+	masterInfo := masterInfoFromParam(config.GetSlave().GetReplicaOf())
 	addr := masterInfo.Address()
 
 	conn, err := net.Dial("tcp", addr)
@@ -77,14 +76,14 @@ func ConnectMaster(replicaof string, config config.Config) (net.Conn, error) {
 	return conn, nil
 }
 
-func Handshakes(conn net.Conn, config config.Config) (*bufio.Reader, error) {
+func Handshakes(conn net.Conn, config interfaces.IConfig) (*bufio.Reader, error) {
 	if err := sendMessage(conn, "*1\r\n$4\r\nPING\r\n"); err != nil {
 		return nil, err
 	}
 	readAnswer(conn)
 	if err := sendMessage(
 		conn,
-		fmt.Sprintf("*3\r\n$8\r\nREPLCONF\r\n$14\r\nlistening-port\r\n$4\r\n%d\r\n", config.Port),
+		fmt.Sprintf("*3\r\n$8\r\nREPLCONF\r\n$14\r\nlistening-port\r\n$4\r\n%d\r\n", config.GetPort()),
 	); err != nil {
 		return nil, err
 	}

@@ -1,19 +1,11 @@
-package transactions
+package commands
 
 import (
-	"context"
-	"io"
 	"net"
 	"sync"
 
 	"github.com/sirupsen/logrus"
-
-	"github.com/codecrafters-io/redis-starter-go/internal/config"
 )
-
-type Command interface {
-	Execute(ctx context.Context, conn io.Writer, config config.Config, args []string)
-}
 
 type BufferedCommand struct {
 	CMD  Command
@@ -60,7 +52,6 @@ func (t *Transactions) GetTransactionBuffer(conn net.Conn) *TransactionBuffer {
 }
 
 func (t *TransactionBuffer) StartTransaction() {
-	logrus.Info("Starting transaction")
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.Active = true
@@ -78,12 +69,6 @@ func (t *TransactionBuffer) IsBufferEmpty() bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	result := len(t.CommandsBuffer) == 0
-
-	logrus.WithFields(logrus.Fields{
-		"package":  "transactions",
-		"function": "IsBufferEmpty",
-		"result":   result,
-	})
 
 	return result
 }

@@ -16,21 +16,16 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/codecrafters-io/redis-starter-go/internal/clients"
-	"github.com/codecrafters-io/redis-starter-go/internal/config"
+	"github.com/codecrafters-io/redis-starter-go/internal/interfaces"
 	"github.com/codecrafters-io/redis-starter-go/internal/redis"
 	"github.com/codecrafters-io/redis-starter-go/internal/store"
-	"github.com/codecrafters-io/redis-starter-go/internal/transactions"
 	"github.com/codecrafters-io/redis-starter-go/internal/utils"
 )
-
-type Command interface {
-	Execute(ctx context.Context, conn io.Writer, config config.Config, args []string)
-}
 
 type CommandHandler func(
 	ctx context.Context,
 	conn io.Writer,
-	config config.Config,
+	config interfaces.IConfig,
 	args []string,
 )
 
@@ -69,7 +64,7 @@ type XAddCommand struct{}
 func (c *XAddCommand) Execute(
 	ctx context.Context,
 	conn io.Writer,
-	config config.Config,
+	config interfaces.IConfig,
 	args []string,
 ) {
 	if len(args) < 3 {
@@ -79,12 +74,16 @@ func (c *XAddCommand) Execute(
 
 	var answerStr string
 
-	storeObj := utils.GetStoreObj(ctx)
+	storeObj, ok := utils.GetFromCtx[*store.Store](ctx, "store")
+
+	if !ok {
+		log.Error("No store in context")
+		return
+	}
 
 	key := args[1]
 
 	id, err := store.FormID(key, args[2], storeObj)
-
 	fields := make(map[string]string)
 
 	for i := 3; i < len(args); i += 2 {
@@ -104,16 +103,17 @@ func (c *XAddCommand) Execute(
 		storeObj.XAdd(key, streamMessage)
 	}
 
-	logrus.Debug("XADD BEFORE SELECT")
+	blockCh, ok := utils.GetFromCtx[chan struct{}](ctx, "blockCh")
 
-	blockCh := utils.GetBlockChObj(ctx)
+	if !ok {
+		log.Error("No store in context")
+		return
+	}
 
 	select {
 	case blockCh <- struct{}{}:
 	default:
 	}
-
-	logrus.Debug("XADD AFTER SELECT")
 
 	conn.Write([]byte(answerStr))
 }
@@ -123,7 +123,7 @@ type XReadCommand struct{}
 func (c *XReadCommand) Execute(
 	ctx context.Context,
 	conn io.Writer,
-	config config.Config,
+	config interfaces.IConfig,
 	args []string,
 ) {
 	var streamsIndex int
@@ -147,15 +147,13 @@ func (c *XReadCommand) Execute(
 		time.Sleep(time.Duration(timeSleep) * time.Millisecond)
 
 		if args[2] == "0" {
-			blockCh := utils.GetBlockChObj(ctx)
-			<-blockCh
+			blockCh, ok := utils.GetFromCtx[chan struct{}](ctx, "blockCh")
 
-			// блокируем горутину, пока не получим сообщения XADD из другого потока
-			// получаем из ctx канал и ждем из него сообщения
-			// в XADD добавляем значение в канал
-			// тем самым разблокируем эту горутину
-			// но как быть если XADD нужно не всегда что-то отправлять в канал ?
-			// select {} где case ch <- "XADD" либо default
+			if !ok {
+				log.Error("No store in context")
+				return
+			}
+			<-blockCh
 		}
 
 	} else {
@@ -167,7 +165,12 @@ func (c *XReadCommand) Execute(
 	streamKeys := args[streamsIndex : streamsIndex+numStreams]
 	IDs := args[streamsIndex+numStreams:]
 
-	storeObj := utils.GetStoreObj(ctx)
+	storeObj, ok := utils.GetFromCtx[*store.Store](ctx, "store")
+
+	if !ok {
+		log.Error("No store in context")
+		return
+	}
 
 	var bb bytes.Buffer
 
@@ -222,7 +225,7 @@ type XRangeCommand struct{}
 func (c *XRangeCommand) Execute(
 	ctx context.Context,
 	conn io.Writer,
-	config config.Config,
+	config interfaces.IConfig,
 	args []string,
 ) {
 	if len(args) < 3 {
@@ -233,7 +236,13 @@ func (c *XRangeCommand) Execute(
 	key := args[1]
 	IDs := args[2:4]
 
-	storeObj := utils.GetStoreObj(ctx)
+	storeObj, ok := utils.GetFromCtx[*store.Store](ctx, "store")
+
+	if !ok {
+		log.Error("No store in context")
+		return
+	}
+
 	res, err := storeObj.GetStreamsRange(key, [2]string{IDs[0], IDs[1]})
 	if err != nil {
 		logrus.Error(err)
@@ -267,7 +276,7 @@ type TypeCommand struct{}
 func (c *TypeCommand) Execute(
 	ctx context.Context,
 	conn io.Writer,
-	config config.Config,
+	config interfaces.IConfig,
 	args []string,
 ) {
 	if len(args) < 2 {
@@ -277,7 +286,12 @@ func (c *TypeCommand) Execute(
 
 	key := args[1]
 
-	storeObj := utils.GetStoreObj(ctx)
+	storeObj, ok := utils.GetFromCtx[*store.Store](ctx, "store")
+
+	if !ok {
+		log.Error("No store in context")
+		return
+	}
 
 	keyType, err := storeObj.GetType(key)
 	if err != nil {
@@ -296,22 +310,22 @@ type DiscardCommand struct{}
 func (c *DiscardCommand) Execute(
 	ctx context.Context,
 	conn io.Writer,
-	config config.Config,
+	config interfaces.IConfig,
 	args []string,
 ) {
-	transactionsObj := transactions.GetTransactionsObj(ctx)
-
-	if conn, ok := conn.(net.Conn); ok {
-		transactionBufferObj := transactionsObj.GetTransactionBuffer(conn)
-
-		if !transactionBufferObj.IsTransactionActive() {
-			conn.Write([]byte("-ERR DISCARD without MULTI\r\n"))
-			return
-		}
-
-		transactionBufferObj.DiscardTransaction()
-		conn.Write([]byte("+OK\r\n"))
-	}
+	// transactionsObj := utils.GetTransactionsObj(ctx)
+	//
+	// if conn, ok := conn.(net.Conn); ok {
+	// 	transactionBufferObj := transactionsObj.GetTransactionBuffer(conn)
+	//
+	// 	if !transactionBufferObj.IsTransactionActive() {
+	// 		conn.Write([]byte("-ERR DISCARD without MULTI\r\n"))
+	// 		return
+	// 	}
+	//
+	// 	transactionBufferObj.DiscardTransaction()
+	// 	conn.Write([]byte("+OK\r\n"))
+	// }
 }
 
 /*
@@ -322,49 +336,49 @@ type ExecCommand struct{}
 func (c *ExecCommand) Execute(
 	ctx context.Context,
 	conn io.Writer,
-	config config.Config,
+	config interfaces.IConfig,
 	args []string,
 ) {
-	transactionsObj := transactions.GetTransactionsObj(ctx)
-
-	var buffer bytes.Buffer
-	buffer.Grow(8)
-
-	var lenCommands int
-
-	if conn, ok := conn.(net.Conn); ok {
-		transactionBufferObj := transactionsObj.Values[conn]
-
-		if !transactionBufferObj.IsTransactionActive() {
-			conn.Write([]byte("-ERR EXEC without MULTI\r\n"))
-			return
-		}
-
-		if transactionBufferObj.IsBufferEmpty() {
-			conn.Write([]byte("*0\r\n"))
-
-			transactionBufferObj.InActivateTransaction()
-			return
-		}
-
-		commands := transactionBufferObj.PopCommands()
-		lenCommands = len(commands)
-
-		for _, command := range commands {
-			args := command.Args
-			cmd := command.CMD
-
-			if _, ok := conn.(net.Conn); ok {
-				cmd.Execute(ctx, &buffer, config, args)
-			}
-		}
-
-		transactionBufferObj.InActivateTransaction()
-	}
-
-	result := fmt.Sprintf("*%d\r\n%s", lenCommands, buffer.String())
-	conn.Write([]byte(result))
-	return
+	// transactionsObj := utils.GetTransactionsObj(ctx)
+	//
+	// var buffer bytes.Buffer
+	// buffer.Grow(8)
+	//
+	// var lenCommands int
+	//
+	// if conn, ok := conn.(net.Conn); ok {
+	// 	transactionBufferObj := transactionsObj.Values[conn]
+	//
+	// 	if !transactionBufferObj.IsTransactionActive() {
+	// 		conn.Write([]byte("-ERR EXEC without MULTI\r\n"))
+	// 		return
+	// 	}
+	//
+	// 	if transactionBufferObj.IsBufferEmpty() {
+	// 		conn.Write([]byte("*0\r\n"))
+	//
+	// 		transactionBufferObj.InActivateTransaction()
+	// 		return
+	// 	}
+	//
+	// 	commands := transactionBufferObj.PopCommands()
+	// 	lenCommands = len(commands)
+	//
+	// 	for _, command := range commands {
+	// 		args := command.Args
+	// 		cmd := command.CMD
+	//
+	// 		if _, ok := conn.(net.Conn); ok {
+	// 			cmd.Execute(ctx, &buffer, config, args)
+	// 		}
+	// 	}
+	//
+	// 	transactionBufferObj.InActivateTransaction()
+	// }
+	//
+	// result := fmt.Sprintf("*%d\r\n%s", lenCommands, buffer.String())
+	// conn.Write([]byte(result))
+	// return
 }
 
 /*
@@ -375,17 +389,17 @@ type MultiCommand struct{}
 func (c *MultiCommand) Execute(
 	ctx context.Context,
 	conn io.Writer,
-	config config.Config,
+	config interfaces.IConfig,
 	args []string,
 ) {
-	transactionsObj := transactions.GetTransactionsObj(ctx)
-
-	if conn, ok := conn.(net.Conn); ok {
-		transactionBufferObj := transactionsObj.Values[conn]
-		transactionBufferObj.StartTransaction()
-	}
-
-	conn.Write([]byte("+OK\r\n"))
+	// transactionsObj := utils.GetTransactionsObj(ctx)
+	//
+	// if conn, ok := conn.(net.Conn); ok {
+	// 	transactionBufferObj := transactionsObj.Values[conn]
+	// 	transactionBufferObj.StartTransaction()
+	// }
+	//
+	// conn.Write([]byte("+OK\r\n"))
 }
 
 /*
@@ -396,7 +410,7 @@ type IncrCommand struct{}
 func (c *IncrCommand) Execute(
 	ctx context.Context,
 	conn io.Writer,
-	config config.Config,
+	config interfaces.IConfig,
 	args []string,
 ) {
 	if len(args) < 2 {
@@ -405,7 +419,12 @@ func (c *IncrCommand) Execute(
 	}
 	key := args[1]
 
-	storeObj := utils.GetStoreObj(ctx)
+	storeObj, ok := utils.GetFromCtx[*store.Store](ctx, "store")
+
+	if !ok {
+		log.Error("No store in context")
+		return
+	}
 
 	value, err := storeObj.Incr(key)
 	if err != nil {
@@ -424,7 +443,7 @@ type EchoCommand struct{}
 func (c *EchoCommand) Execute(
 	ctx context.Context,
 	conn io.Writer,
-	config config.Config,
+	config interfaces.IConfig,
 	args []string,
 ) {
 	msg := args[1]
@@ -439,10 +458,10 @@ type PingCommand struct{}
 func (c *PingCommand) Execute(
 	ctx context.Context,
 	conn io.Writer,
-	config config.Config,
+	config interfaces.IConfig,
 	args []string,
 ) {
-	switch config.Role {
+	switch config.GetRole() {
 	case "master":
 		conn.Write([]byte("+PONG\r\n"))
 	}
@@ -456,7 +475,7 @@ type SetCommand struct{}
 func (c *SetCommand) Execute(
 	ctx context.Context,
 	conn io.Writer,
-	config config.Config,
+	config interfaces.IConfig,
 	args []string,
 ) {
 	key, value := args[1], args[2]
@@ -485,7 +504,7 @@ func (c *SetCommand) Execute(
 		}
 	}
 
-	switch config.Role {
+	switch config.GetRole() {
 	case "master":
 		conn.Write([]byte("+OK\r\n"))
 	}
@@ -499,7 +518,7 @@ type GetCommand struct{}
 func (c *GetCommand) Execute(
 	ctx context.Context,
 	conn io.Writer,
-	config config.Config,
+	config interfaces.IConfig,
 	args []string,
 ) {
 	key := args[1]
@@ -528,7 +547,7 @@ type InfoCommand struct{}
 func (c *InfoCommand) Execute(
 	ctx context.Context,
 	conn io.Writer,
-	config config.Config,
+	config interfaces.IConfig,
 	args []string,
 ) {
 	switch args[1] {
@@ -536,17 +555,20 @@ func (c *InfoCommand) Execute(
 		var builder strings.Builder
 		builder.Grow(128)
 
-		role := fmt.Sprintf("role:%s", config.Role)
+		role := fmt.Sprintf("role:%s", config.GetRole())
 		builder.WriteString(fmt.Sprintf("%s\n", role))
 
-		switch config.Role {
+		switch config.GetRole() {
 		case "master":
-			master_replid := fmt.Sprintf("master_replid:%s", config.Master.MasterReplId)
+			master_replid := fmt.Sprintf(
+				"master_replid:%s",
+				config.GetMaster().GetMasterReplId(),
+			)
 			builder.WriteString(fmt.Sprintf("%s\n", master_replid))
 
 			master_repl_offset := fmt.Sprintf(
 				"master_repl_offset:%d",
-				config.Master.MasterReplOffset.Load(),
+				config.GetMaster().GetMasterReplOffset(),
 			)
 			builder.WriteString(
 				fmt.Sprintf("%s\n", master_repl_offset),
@@ -572,7 +594,7 @@ type ReplConfCommand struct{}
 func (c *ReplConfCommand) Execute(
 	ctx context.Context,
 	conn io.Writer,
-	config config.Config,
+	config interfaces.IConfig,
 	args []string,
 ) {
 	commands := map[string]CommandHandler{
@@ -580,7 +602,7 @@ func (c *ReplConfCommand) Execute(
 		"slave":  c.handleSlave,
 	}
 
-	if handler, exists := commands[config.Role]; exists {
+	if handler, exists := commands[config.GetRole()]; exists {
 		handler(ctx, conn, config, args)
 	}
 }
@@ -593,13 +615,13 @@ type PsyncCommand struct{}
 func (c *PsyncCommand) Execute(
 	ctx context.Context,
 	conn io.Writer,
-	config config.Config,
+	config interfaces.IConfig,
 	args []string,
 ) {
 	data := fmt.Sprintf(
 		"+FULLRESYNC %s %d\r\n",
-		config.Master.MasterReplId,
-		config.Master.MasterReplOffset.Load(),
+		config.GetMaster().GetMasterReplId(),
+		config.GetMaster().GetMasterReplOffset(),
 	)
 	emptyRDB, _ := hex.DecodeString(redis.EMPTYRDBSTORE)
 	data += fmt.Sprintf("$%d\r\n%s", len(emptyRDB), emptyRDB)
@@ -629,7 +651,7 @@ type WaitCommand struct{}
 func (c *WaitCommand) Execute(
 	ctx context.Context,
 	conn io.Writer,
-	config config.Config,
+	config interfaces.IConfig,
 	args []string,
 ) {
 	if len(args) < 3 {
@@ -650,13 +672,18 @@ func (c *WaitCommand) Execute(
 	}
 	timerCh := time.After(time.Duration(timer) * time.Millisecond)
 
-	clientsObj := utils.GetClientsObj(ctx)
+	clientsObj, ok := utils.GetFromCtx[*clients.Clients](ctx, "clients")
+
+	if !ok {
+		log.Error("No store in context")
+		return
+	}
 
 	done := make(chan int, 1)
 
 	var counter int64
 
-	if config.Master.MasterReplOffset.Load() == 0 {
+	if config.GetMaster().GetMasterReplOffset() == 0 {
 		done <- len(clientsObj.Clients)
 	} else {
 
@@ -667,7 +694,7 @@ func (c *WaitCommand) Execute(
 		}
 
 		clientsObj.Subscribe(func(conn net.Conn, clientOffset int) {
-			masterOffset := config.Master.MasterReplOffset.Load()
+			masterOffset := config.GetMaster().GetMasterReplOffset()
 			log.WithFields(log.Fields{
 				"package":      "commands",
 				"function":     "WaitCommand.Execute",
@@ -738,7 +765,7 @@ type ConfigCommand struct{}
 func (c *ConfigCommand) Execute(
 	ctx context.Context,
 	conn io.Writer,
-	config config.Config,
+	config interfaces.IConfig,
 	args []string,
 ) {
 	if len(args) < 3 {
@@ -762,7 +789,7 @@ type KeysCommand struct{}
 func (c *KeysCommand) Execute(
 	ctx context.Context,
 	conn io.Writer,
-	config config.Config,
+	config interfaces.IConfig,
 	args []string,
 ) {
 	if len(args) < 2 {

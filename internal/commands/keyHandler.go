@@ -5,16 +5,16 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/codecrafters-io/redis-starter-go/internal/config"
-	"github.com/codecrafters-io/redis-starter-go/internal/utils"
+	"github.com/codecrafters-io/redis-starter-go/internal/interfaces"
+	"github.com/codecrafters-io/redis-starter-go/internal/redis"
 )
 
 func (c *KeysCommand) handleAll(
 	ctx context.Context,
 	conn io.Writer,
-	config config.Config,
+	config interfaces.IConfig,
 	args []string,
 ) {
-	fileContent := utils.ReadFile(config.RedisDir + "/" + config.RedisDbFileName)
+	fileContent := redis.ReadFile(config.GetRedisDir() + "/" + config.GetRedisDbFileName())
 	conn.Write([]byte(fmt.Sprintf("*1\r\n$%d\r\n%s\r\n", len(fileContent), fileContent)))
 }

@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/codecrafters-io/redis-starter-go/internal/config"
+	"github.com/codecrafters-io/redis-starter-go/internal/interfaces"
 )
 
 func (c *ConfigCommand) handleGet(
 	ctx context.Context,
 	conn io.Writer,
-	config config.Config,
+	config interfaces.IConfig,
 	args []string,
 ) {
 	commands := map[string]CommandHandler{
@@ -27,13 +27,13 @@ func (c *ConfigCommand) handleGet(
 func (c *ConfigCommand) handleGetDir(
 	ctx context.Context,
 	conn io.Writer,
-	config config.Config,
+	config interfaces.IConfig,
 	args []string,
 ) {
 	dir := fmt.Sprintf(
 		"*2\r\n$3\r\ndir\r\n$%d\r\n%s\r\n",
-		len(config.RedisDir),
-		config.RedisDir,
+		len(config.GetRedisDir()),
+		config.GetRedisDir(),
 	)
 	conn.Write([]byte(dir))
 }
@@ -41,13 +41,13 @@ func (c *ConfigCommand) handleGetDir(
 func (c *ConfigCommand) handleGetDbFile(
 	ctx context.Context,
 	conn io.Writer,
-	config config.Config,
+	config interfaces.IConfig,
 	args []string,
 ) {
 	dir := fmt.Sprintf(
 		"*2\r\n$9\r\ndbfilename\r\n$%d\r\n%s\r\n",
-		len(config.RedisDbFileName),
-		config.RedisDbFileName,
+		len(config.GetRedisDbFileName()),
+		config.GetRedisDbFileName(),
 	)
 	conn.Write([]byte(dir))
 }

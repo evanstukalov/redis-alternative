@@ -1,4 +1,4 @@
-package utils
+package redis
 
 import (
 	"context"
@@ -6,6 +6,9 @@ import (
 	"os"
 
 	"github.com/sirupsen/logrus"
+
+	"github.com/codecrafters-io/redis-starter-go/internal/store"
+	"github.com/codecrafters-io/redis-starter-go/internal/utils"
 )
 
 const (
@@ -37,8 +40,6 @@ func parseTable(bytes []byte) []byte {
 
 func ReadFile(path string) string {
 	c, _ := os.ReadFile(path)
-	logrus.Debug(c)
-	logrus.Debug(string(c))
 	key := parseTable(c)
 	str := key[4 : 4+key[3]]
 	return string(str)
@@ -61,6 +62,11 @@ func LoadRDB(ctx context.Context, dir string, dbFileName string) {
 		"value": value,
 	}).Debug("LoadRDB")
 
-	storeObj := GetStoreObj(ctx)
+	storeObj, ok := utils.GetFromCtx[*store.Store](ctx, "store")
+
+	if !ok {
+		logrus.Error("No store in context")
+		return
+	}
 	storeObj.Set(key, value, nil)
 }

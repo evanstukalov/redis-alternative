@@ -6,8 +6,9 @@ import (
 	"net"
 
 	"github.com/codecrafters-io/redis-starter-go/internal/commands"
-	"github.com/codecrafters-io/redis-starter-go/internal/config"
-	"github.com/codecrafters-io/redis-starter-go/internal/transactions"
+	"github.com/codecrafters-io/redis-starter-go/internal/interfaces"
+	"github.com/codecrafters-io/redis-starter-go/internal/utils"
+	"github.com/sirupsen/logrus"
 )
 
 type CommandHandler interface {
@@ -15,7 +16,7 @@ type CommandHandler interface {
 	Handle(
 		ctx context.Context,
 		conn io.Writer,
-		config config.Config,
+		config interfaces.IConfig,
 		args []string,
 		cmd commands.Command,
 	) bool
@@ -33,7 +34,7 @@ func (b *BaseCommandHandler) SetNext(handler CommandHandler) CommandHandler {
 func (b *BaseCommandHandler) Handle(
 	ctx context.Context,
 	conn io.Writer,
-	config config.Config,
+	config interfaces.IConfig,
 	args []string,
 	cmd commands.Command,
 ) bool {
@@ -45,7 +46,7 @@ func (b *BaseCommandHandler) Handle(
 func (b *BaseCommandHandler) HandleNext(
 	ctx context.Context,
 	conn io.Writer,
-	config config.Config,
+	config interfaces.IConfig,
 	args []string,
 	cmd commands.Command,
 ) bool {
@@ -62,7 +63,7 @@ type DiscardConditionHandler struct {
 func (b *DiscardConditionHandler) Handle(
 	ctx context.Context,
 	conn io.Writer,
-	config config.Config,
+	config interfaces.IConfig,
 	args []string,
 	cmd commands.Command,
 ) bool {
@@ -81,16 +82,22 @@ type QueuedConditionHandler struct {
 func (b *QueuedConditionHandler) Handle(
 	ctx context.Context,
 	conn io.Writer,
-	config config.Config,
+	config interfaces.IConfig,
 	args []string,
 	cmd commands.Command,
 ) bool {
-	transactionsObj := transactions.GetTransactionsObj(ctx)
+	transactionsObj, ok := utils.GetFromCtx[*commands.Transactions](ctx, "transactions")
+
+	if !ok {
+		logrus.Error("No transactions in context")
+		return false
+	}
+
 	transactionBufferObj := transactionsObj.GetTransactionBuffer(conn.(net.Conn))
 
 	if _, ok := cmd.(*commands.ExecCommand); !ok && transactionBufferObj.IsTransactionActive() {
 
-		transactionBufferObj.PutCommand(&transactions.BufferedCommand{
+		transactionBufferObj.PutCommand(&commands.BufferedCommand{
 			CMD:  cmd,
 			Args: args,
 		})

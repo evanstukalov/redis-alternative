@@ -4,11 +4,12 @@ import (
 	"bufio"
 	"context"
 	"fmt"
+	"log"
 	"net"
 	"strings"
 
 	"github.com/codecrafters-io/redis-starter-go/internal/commands"
-	"github.com/codecrafters-io/redis-starter-go/internal/config"
+	"github.com/codecrafters-io/redis-starter-go/internal/interfaces"
 	"github.com/codecrafters-io/redis-starter-go/internal/redis"
 )
 
@@ -17,11 +18,25 @@ type CommandRequest struct {
 	offset int
 }
 
+func HandleSlaveMode(ctx context.Context, config interfaces.IConfig) {
+	masterConn, err := ConnectMaster(config)
+	if err != nil {
+		log.Fatalln("Error connecting to master: ", err)
+	}
+
+	reader, err := Handshakes(masterConn, config)
+	if err != nil {
+		log.Fatalln("There is was error in handshakes with master : ", err)
+	}
+
+	go ReadFromConnection(ctx, masterConn, reader, config)
+}
+
 func ReadFromConnection(
 	ctx context.Context,
 	conn net.Conn,
 	reader *bufio.Reader,
-	config config.Config,
+	config interfaces.IConfig,
 ) {
 	defer conn.Close()
 
@@ -48,7 +63,7 @@ func ReadFromConnection(
 func HandleCommand(
 	ctx context.Context,
 	conn net.Conn,
-	config config.Config,
+	config interfaces.IConfig,
 	commandChannel <-chan CommandRequest,
 ) {
 	for cmdRequest := range commandChannel {
@@ -60,8 +75,8 @@ func HandleCommand(
 		}
 		fmt.Printf("Offset new command: %d\r\n", cmdRequest.offset)
 		cmd.Execute(ctx, conn, config, cmdRequest.args)
-		config.Slave.Offset.Add(int64(cmdRequest.offset))
+		config.GetSlave().AddOffset(int64(cmdRequest.offset))
 
-		fmt.Printf("Total offset after command %d\r\n", config.Slave.Offset.Load())
+		fmt.Printf("Total offset after command %d\r\n", config.GetSlave().GetOffset())
 	}
 }

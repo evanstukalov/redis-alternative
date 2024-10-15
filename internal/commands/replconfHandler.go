@@ -7,14 +7,17 @@ import (
 	"net"
 	"strconv"
 
-	"github.com/codecrafters-io/redis-starter-go/internal/config"
+	"github.com/sirupsen/logrus"
+
+	"github.com/codecrafters-io/redis-starter-go/internal/clients"
+	"github.com/codecrafters-io/redis-starter-go/internal/interfaces"
 	"github.com/codecrafters-io/redis-starter-go/internal/utils"
 )
 
 func (c *ReplConfCommand) handleMaster(
 	ctx context.Context,
 	conn io.Writer,
-	config config.Config,
+	config interfaces.IConfig,
 	args []string,
 ) {
 	commands := map[string]CommandHandler{
@@ -31,12 +34,13 @@ func (c *ReplConfCommand) handleMaster(
 func (c *ReplConfCommand) handleSlave(
 	ctx context.Context,
 	conn io.Writer,
-	config config.Config,
+	config interfaces.IConfig,
 	args []string,
 ) {
 	if args[1] == "GETACK" && args[2] == "*" {
-		offset := config.Slave.Offset.Load()
+		offset := config.GetSlave().GetOffset()
 		byteCount := len(strconv.Itoa(int(offset)))
+
 		conn.Write(
 			[]byte(
 				fmt.Sprintf(
@@ -52,7 +56,7 @@ func (c *ReplConfCommand) handleSlave(
 func (c *ReplConfCommand) handleOk(
 	ctx context.Context,
 	conn io.Writer,
-	config config.Config,
+	config interfaces.IConfig,
 	args []string,
 ) {
 	conn.Write([]byte("+OK\r\n"))
@@ -61,18 +65,23 @@ func (c *ReplConfCommand) handleOk(
 func (c *ReplConfCommand) handleAck(
 	ctx context.Context,
 	conn io.Writer,
-	config config.Config,
+	config interfaces.IConfig,
 	args []string,
 ) {
-	clients := utils.GetClientsObj(ctx)
+	clientsObj, ok := utils.GetFromCtx[*clients.Clients](ctx, "clients")
+
+	if !ok {
+		logrus.Error("No store in context")
+		return
+	}
 
 	if conn, ok := conn.(net.Conn); ok {
 
-		_, ok := clients.Clients[conn]
+		_, ok := clientsObj.Clients[conn]
 
 		if ok {
 			offset, _ := strconv.Atoi(args[2])
-			clients.SetOffset(conn, offset)
+			clientsObj.SetOffset(conn, offset)
 		}
 	}
 }

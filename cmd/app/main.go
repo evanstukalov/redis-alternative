@@ -1,22 +1,17 @@
 package main
 
 import (
-	"context"
 	"flag"
-	"fmt"
 	"net"
 	"os"
 
 	nested "github.com/antonfisher/nested-logrus-formatter"
 	log "github.com/sirupsen/logrus"
 
-	"github.com/codecrafters-io/redis-starter-go/internal/clients"
 	"github.com/codecrafters-io/redis-starter-go/internal/config"
 	"github.com/codecrafters-io/redis-starter-go/internal/master"
+	"github.com/codecrafters-io/redis-starter-go/internal/redis"
 	"github.com/codecrafters-io/redis-starter-go/internal/slave"
-	"github.com/codecrafters-io/redis-starter-go/internal/store"
-	"github.com/codecrafters-io/redis-starter-go/internal/transactions"
-	"github.com/codecrafters-io/redis-starter-go/internal/utils"
 )
 
 func init() {
@@ -28,88 +23,43 @@ func init() {
 	log.SetLevel(log.DebugLevel)
 }
 
-func main() {
-	log.WithFields(log.Fields{
-		"package":  "main",
-		"function": "main",
-	}).Info("An application has started!")
-
+func parseFlags() config.Flags {
 	port := flag.Int("port", 6379, "Port to listen on")
 	replicaOf := flag.String("replicaof", "", "Replica to another server")
 	dir := flag.String("dir", "", "Directory to store data")
 	dbFileName := flag.String("dbfilename", "", "Database file name")
 
 	flag.Parse()
-
-	cfg := config.Config{
-		Port:            *port,
-		RedisDir:        *dir,
-		RedisDbFileName: *dbFileName,
+	return config.Flags{
+		Port:       *port,
+		ReplicaOf:  *replicaOf,
+		Dir:        *dir,
+		DbFileName: *dbFileName,
 	}
+}
 
-	storeObj := store.NewStore()
-	expiredCollector := store.NewExpiredCollector(storeObj)
-	clients := clients.NewClients()
-	transaction := transactions.NewTransaction()
-	blockCh := make(chan struct{})
-
-	ctx := context.Background()
-	ctx = context.WithValue(ctx, "store", storeObj)
-	ctx = context.WithValue(ctx, "clients", clients)
-	ctx = context.WithValue(ctx, "transactions", transaction)
-	ctx = context.WithValue(ctx, "blockCh", blockCh)
-
-	address := fmt.Sprintf("0.0.0.0:%d", cfg.Port)
-
-	l, err := net.Listen("tcp", address)
-	if err != nil {
-		fmt.Println("Failed to bind to port ", cfg.Port)
-		os.Exit(1)
-	}
-	defer l.Close()
-
+func main() {
 	connChan := make(chan net.Conn)
 	errChan := make(chan error)
 
-	if *replicaOf == "" {
-		cfg.Role = "master"
-		cfg.Master = &config.Master{
-			MasterReplId: "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb",
-		}
-	} else {
-		cfg.Role = "slave"
-		cfg.Slave = &config.Slave{
-			Replicaof: *replicaOf,
-		}
-		masterConn, err := slave.ConnectMaster(*replicaOf, cfg)
-		if err != nil {
-			log.Fatalln("Error connecting to master: ", err)
-		}
+	flags := parseFlags()
+	services := config.InitializeServices()
+	ctx := config.CreateContext(services)
 
-		reader, err := slave.Handshakes(masterConn, cfg)
-		if err != nil {
-			log.Fatalln("There is was error in handshakes with master : ", err)
-		}
+	config := config.NewConfig()
+	config.Initialize(&flags)
 
-		go slave.ReadFromConnection(ctx, masterConn, reader, cfg)
+	listener := master.CreateListener(config)
+	defer listener.Close()
+
+	redis.LoadRDB(ctx, config.GetRedisDir(), config.GetRedisDbFileName())
+
+	if config.GetRole() == "slave" {
+		slave.HandleSlaveMode(ctx, config)
 	}
 
-	utils.LoadRDB(ctx, cfg.RedisDir, cfg.RedisDbFileName)
-	go master.AcceptConnections(l, connChan, errChan)
-	go expiredCollector.Tick()
+	go master.AcceptConnections(listener, connChan, errChan)
+	go services.ExpiredCollectorObj.Tick()
 
-	for {
-		select {
-		case conn := <-connChan:
-
-			transcationObj := transactions.GetTransactionsObj(ctx)
-			transcationObj.AddConnection(conn)
-
-			go master.ReadFromConnection(ctx, conn, cfg)
-
-		case err := <-errChan:
-			fmt.Println("Error accepting connection", err.Error())
-
-		}
-	}
+	master.HandleConnections(ctx, connChan, errChan, config)
 }
