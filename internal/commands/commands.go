@@ -73,6 +73,7 @@ func (c *XAddCommand) Execute(
 	}
 
 	var answerStr string
+	var index uint
 
 	storeObj, ok := utils.GetFromCtx[*store.Store](ctx, "store")
 
@@ -100,10 +101,13 @@ func (c *XAddCommand) Execute(
 			Fields: fields,
 		}
 
-		storeObj.XAdd(key, streamMessage)
+		index, err = storeObj.XAdd(key, streamMessage)
+		if err != nil {
+			logrus.Error(err)
+		}
 	}
 
-	blockCh, ok := utils.GetFromCtx[chan struct{}](ctx, "blockCh")
+	blockCh, ok := utils.GetFromCtx[chan uint](ctx, "blockCh")
 
 	if !ok {
 		log.Error("No store in context")
@@ -111,8 +115,9 @@ func (c *XAddCommand) Execute(
 	}
 
 	select {
-	case blockCh <- struct{}{}:
+	case blockCh <- index:
 	default:
+		logrus.Info("blockCh is full")
 	}
 
 	conn.Write([]byte(answerStr))
@@ -126,94 +131,36 @@ func (c *XReadCommand) Execute(
 	config interfaces.IConfig,
 	args []string,
 ) {
-	var streamsIndex int
-	var numStreams int
-	var block bool
+	options, err := parseXREADCommand(args[1:])
+	if err != nil {
+		logrus.Error(err)
+		return
+	}
+	logrus.Info("options: ", options)
 
-	if args[1] == "block" {
-
-		streamsIndex = 4
-
-		block = true
-
-		numStreams = (len(args) - 4) / 2
-
-		timeSleep, err := strconv.Atoi(args[2])
-		if err != nil {
-			logrus.Error(err)
-			return
-		}
-
-		time.Sleep(time.Duration(timeSleep) * time.Millisecond)
-
-		if args[2] == "0" {
-			blockCh, ok := utils.GetFromCtx[chan struct{}](ctx, "blockCh")
-
-			if !ok {
-				log.Error("No store in context")
-				return
-			}
-			<-blockCh
-		}
-
-	} else {
-		streamsIndex = 2
-
-		numStreams = (len(args) - 2) / 2
+	exclusiveIndex, err := handleBlockOption(ctx, options, args)
+	if err != nil {
+		logrus.Error(err)
+		return
+	}
+	if options.Ids[0] == "$" {
+		options.exclusiveIndex = &exclusiveIndex
 	}
 
-	streamKeys := args[streamsIndex : streamsIndex+numStreams]
-	IDs := args[streamsIndex+numStreams:]
-
 	storeObj, ok := utils.GetFromCtx[*store.Store](ctx, "store")
-
 	if !ok {
-		log.Error("No store in context")
+		logrus.Error("No store in context")
 		return
 	}
 
+	streamPairs := makeStreamPairs(options)
+	fillStreamPairsWithMessages(conn, options, storeObj, &streamPairs)
+
 	var bb bytes.Buffer
-
-	type StreamPair struct {
-		streamKey string
-		id        string
-		messages  []store.StreamMessage
-	}
-
-	streamPairs := make([]StreamPair, 0, len(streamKeys))
-
-	for i := range streamKeys {
-		streamPairs = append(streamPairs, StreamPair{
-			streamKey: streamKeys[i],
-			id:        IDs[i],
-			messages:  make([]store.StreamMessage, 0, 8),
-		})
-	}
-
-	for index, streamPair := range streamPairs {
-
-		messages, err := storeObj.GetStreamsExclusive(streamPair.streamKey, streamPair.id)
-		if err != nil {
-			logrus.Error(err)
-			return
-		}
-
-		streamPairs[index].messages = messages
-
-		if block && len(messages) == 0 {
-			conn.Write([]byte("$-1\r\n"))
-			return
-		}
-	}
-
-	bb.WriteString(arrayResp(len(streamKeys)))
-
+	bb.WriteString(arrayResp(len(options.Streams)))
 	for _, streamPair := range streamPairs {
 		writeStreamMessage(&bb, streamPair.streamKey, streamPair.messages)
 	}
-
-	logrus.Error(bb.String())
-
 	conn.Write(bb.Bytes())
 }
 
@@ -313,19 +260,23 @@ func (c *DiscardCommand) Execute(
 	config interfaces.IConfig,
 	args []string,
 ) {
-	// transactionsObj := utils.GetTransactionsObj(ctx)
-	//
-	// if conn, ok := conn.(net.Conn); ok {
-	// 	transactionBufferObj := transactionsObj.GetTransactionBuffer(conn)
-	//
-	// 	if !transactionBufferObj.IsTransactionActive() {
-	// 		conn.Write([]byte("-ERR DISCARD without MULTI\r\n"))
-	// 		return
-	// 	}
-	//
-	// 	transactionBufferObj.DiscardTransaction()
-	// 	conn.Write([]byte("+OK\r\n"))
-	// }
+	transactionsObj, ok := utils.GetFromCtx[ITransactions](ctx, "transactions")
+	if !ok {
+		logrus.Error("No transactions in context")
+		return
+	}
+
+	if conn, ok := conn.(net.Conn); ok {
+		transactionBufferObj := transactionsObj.GetTransactionBuffer(conn)
+
+		if !transactionBufferObj.IsActive() {
+			conn.Write([]byte("-ERR DISCARD without MULTI\r\n"))
+			return
+		}
+
+		transactionBufferObj.Discard()
+		conn.Write([]byte("+OK\r\n"))
+	}
 }
 
 /*
@@ -339,46 +290,50 @@ func (c *ExecCommand) Execute(
 	config interfaces.IConfig,
 	args []string,
 ) {
-	// transactionsObj := utils.GetTransactionsObj(ctx)
-	//
-	// var buffer bytes.Buffer
-	// buffer.Grow(8)
-	//
-	// var lenCommands int
-	//
-	// if conn, ok := conn.(net.Conn); ok {
-	// 	transactionBufferObj := transactionsObj.Values[conn]
-	//
-	// 	if !transactionBufferObj.IsTransactionActive() {
-	// 		conn.Write([]byte("-ERR EXEC without MULTI\r\n"))
-	// 		return
-	// 	}
-	//
-	// 	if transactionBufferObj.IsBufferEmpty() {
-	// 		conn.Write([]byte("*0\r\n"))
-	//
-	// 		transactionBufferObj.InActivateTransaction()
-	// 		return
-	// 	}
-	//
-	// 	commands := transactionBufferObj.PopCommands()
-	// 	lenCommands = len(commands)
-	//
-	// 	for _, command := range commands {
-	// 		args := command.Args
-	// 		cmd := command.CMD
-	//
-	// 		if _, ok := conn.(net.Conn); ok {
-	// 			cmd.Execute(ctx, &buffer, config, args)
-	// 		}
-	// 	}
-	//
-	// 	transactionBufferObj.InActivateTransaction()
-	// }
-	//
-	// result := fmt.Sprintf("*%d\r\n%s", lenCommands, buffer.String())
-	// conn.Write([]byte(result))
-	// return
+	transactionsObj, ok := utils.GetFromCtx[ITransactions](ctx, "transactions")
+	if !ok {
+		logrus.Error("No transactions in context")
+		return
+	}
+
+	var buffer bytes.Buffer
+	buffer.Grow(8)
+
+	var lenCommands int
+
+	if conn, ok := conn.(net.Conn); ok {
+		transactionBufferObj := transactionsObj.GetTransactionBuffer(conn)
+
+		if !transactionBufferObj.IsActive() {
+			conn.Write([]byte("-ERR EXEC without MULTI\r\n"))
+			return
+		}
+
+		if transactionBufferObj.IsBufferEmpty() {
+			conn.Write([]byte("*0\r\n"))
+
+			transactionBufferObj.UnActivate()
+			return
+		}
+
+		commands := transactionBufferObj.PopCommands()
+		lenCommands = len(commands)
+
+		for _, command := range commands {
+			args := command.Args
+			cmd := command.CMD
+
+			if _, ok := conn.(net.Conn); ok {
+				cmd.Execute(ctx, &buffer, config, args)
+			}
+		}
+
+		transactionBufferObj.UnActivate()
+	}
+
+	result := fmt.Sprintf("*%d\r\n%s", lenCommands, buffer.String())
+	conn.Write([]byte(result))
+	return
 }
 
 /*
@@ -392,14 +347,18 @@ func (c *MultiCommand) Execute(
 	config interfaces.IConfig,
 	args []string,
 ) {
-	// transactionsObj := utils.GetTransactionsObj(ctx)
-	//
-	// if conn, ok := conn.(net.Conn); ok {
-	// 	transactionBufferObj := transactionsObj.Values[conn]
-	// 	transactionBufferObj.StartTransaction()
-	// }
-	//
-	// conn.Write([]byte("+OK\r\n"))
+	transactionsObj, ok := utils.GetFromCtx[ITransactions](ctx, "transactions")
+	if !ok {
+		logrus.Error("No transactions in context")
+		return
+	}
+
+	if conn, ok := conn.(net.Conn); ok {
+		transactionBufferObj := transactionsObj.GetTransactionBuffer(conn)
+		transactionBufferObj.Start()
+	}
+
+	conn.Write([]byte("+OK\r\n"))
 }
 
 /*

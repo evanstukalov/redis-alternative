@@ -17,7 +17,7 @@ type ITransactionBuffer interface {
 	Discard()
 	IsActive() bool
 	IsBufferEmpty() bool
-	Unactivate()
+	UnActivate()
 	PutCommand(command *BufferedCommand)
 	PopCommands() []*BufferedCommand
 }

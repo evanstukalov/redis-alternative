@@ -12,7 +12,7 @@ type Services struct {
 	StoreObj            *store.Store
 	ClientsObj          *clients.Clients
 	TransactionObj      commands.ITransactions
-	BlockCh             chan struct{}
+	BlockCh             chan uint
 	ExpiredCollectorObj *store.ExpiredCollector
 }
 
@@ -21,7 +21,7 @@ func InitializeServices() *Services {
 	transactionObj := commands.NewTransaction()
 	expiredCollectorObj := store.NewExpiredCollector(storeObj)
 	clientsObj := clients.NewClients()
-	blockCh := make(chan struct{})
+	blockCh := make(chan uint)
 
 	return &Services{
 		StoreObj:            storeObj,

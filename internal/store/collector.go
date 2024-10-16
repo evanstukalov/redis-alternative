@@ -2,8 +2,6 @@ package store
 
 import (
 	"time"
-
-	"github.com/sirupsen/logrus"
 )
 
 type ExpiredCollector struct {
@@ -12,7 +10,6 @@ type ExpiredCollector struct {
 }
 
 func NewExpiredCollector(store *Store) *ExpiredCollector {
-	logrus.Info("Creating new expired collector")
 	return &ExpiredCollector{
 		Store:  store,
 		Ticker: time.NewTicker(1 * time.Millisecond),

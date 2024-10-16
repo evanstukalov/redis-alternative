@@ -5,10 +5,11 @@ import (
 	"io"
 	"net"
 
+	"github.com/sirupsen/logrus"
+
 	"github.com/codecrafters-io/redis-starter-go/internal/commands"
 	"github.com/codecrafters-io/redis-starter-go/internal/interfaces"
 	"github.com/codecrafters-io/redis-starter-go/internal/utils"
-	"github.com/sirupsen/logrus"
 )
 
 type CommandHandler interface {
@@ -95,7 +96,7 @@ func (b *QueuedConditionHandler) Handle(
 
 	transactionBufferObj := transactionsObj.GetTransactionBuffer(conn.(net.Conn))
 
-	if _, ok := cmd.(*commands.ExecCommand); !ok && transactionBufferObj.IsTransactionActive() {
+	if _, ok := cmd.(*commands.ExecCommand); !ok && transactionBufferObj.IsActive() {
 
 		transactionBufferObj.PutCommand(&commands.BufferedCommand{
 			CMD:  cmd,

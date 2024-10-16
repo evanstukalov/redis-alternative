@@ -3,8 +3,6 @@ package commands
 import (
 	"net"
 	"sync"
-
-	"github.com/sirupsen/logrus"
 )
 
 type BufferedCommand struct {
@@ -24,16 +22,12 @@ type Transactions struct {
 }
 
 func NewTransactionBuffer() *TransactionBuffer {
-	logrus.Info("Creating new transaction buffer")
-
 	return &TransactionBuffer{
 		CommandsBuffer: make([]*BufferedCommand, 0, 8),
 	}
 }
 
 func NewTransaction() *Transactions {
-	logrus.Info("Creating new transactions obj")
-
 	return &Transactions{
 		Values: make(map[net.Conn]*TransactionBuffer),
 	}
@@ -51,13 +45,13 @@ func (t *Transactions) GetTransactionBuffer(conn net.Conn) *TransactionBuffer {
 	return t.Values[conn]
 }
 
-func (t *TransactionBuffer) StartTransaction() {
+func (t *TransactionBuffer) Start() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.Active = true
 }
 
-func (t *TransactionBuffer) IsTransactionActive() bool {
+func (t *TransactionBuffer) IsActive() bool {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	result := t.Active
@@ -73,13 +67,13 @@ func (t *TransactionBuffer) IsBufferEmpty() bool {
 	return result
 }
 
-func (t *TransactionBuffer) InActivateTransaction() {
+func (t *TransactionBuffer) UnActivate() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.Active = false
 }
 
-func (t *TransactionBuffer) DiscardTransaction() {
+func (t *TransactionBuffer) Discard() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	t.CommandsBuffer = make([]*BufferedCommand, 0, 8)

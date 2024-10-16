@@ -5,12 +5,10 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/sirupsen/logrus"
 	log "github.com/sirupsen/logrus"
 )
 
 func NewStore() *Store {
-	logrus.Info("Creating new store")
 	return &Store{
 		store: make(map[string]Value),
 	}
@@ -31,8 +29,6 @@ func (s *Store) Set(key string, value string, px *int) {
 		ValueData: ValueWithType{Data: StringT(value), DataType: StringType},
 		ExpiredAt: expirationTime,
 	}
-
-	log.Println("Set handler: ", key, value)
 }
 
 func (s *Store) Get(key string) (string, error) {

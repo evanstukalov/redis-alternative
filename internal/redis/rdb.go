@@ -49,7 +49,6 @@ func LoadRDB(ctx context.Context, dir string, dbFileName string) {
 	path := fmt.Sprintf("%s/%s", dir, dbFileName)
 	content, _ := os.ReadFile(path)
 	if len(content) == 0 {
-		logrus.Info("RDB file is empty")
 		return
 	}
 

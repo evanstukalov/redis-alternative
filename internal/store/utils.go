@@ -139,10 +139,5 @@ func binarySearch(messages StreamMessages, targetID string) int {
 }
 
 func GetRangedMessages(messages StreamMessages, i int, i2 int) []StreamMessage {
-	logrus.Info("Messages length ", len(messages.Messages))
-	logrus.Info("Messages: ", messages.Messages)
-	logrus.Info("i: ", i)
-	logrus.Info("i2: ", i2)
-
 	return messages.Messages[i : i2+1]
 }

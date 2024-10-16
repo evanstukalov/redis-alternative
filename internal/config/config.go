@@ -1,8 +1,6 @@
 package config
 
 import (
-	"github.com/sirupsen/logrus"
-
 	"github.com/codecrafters-io/redis-starter-go/internal/interfaces"
 )
 
@@ -30,7 +28,6 @@ func (c *Config) Initialize(flags interfaces.IFlags) {
 		c.SetMaster(&Master{
 			MasterReplId: "8371b4fb1155b71f4a04d3e1bc3e18c4a990aeeb",
 		})
-		logrus.Info("Master is Initialized")
 	} else {
 		c.SetRole("slave")
 		c.SetSlave(&Slave{

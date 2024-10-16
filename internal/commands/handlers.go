@@ -11,8 +11,63 @@ import (
 
 	"github.com/codecrafters-io/redis-starter-go/internal/clients"
 	"github.com/codecrafters-io/redis-starter-go/internal/interfaces"
+	"github.com/codecrafters-io/redis-starter-go/internal/redis"
 	"github.com/codecrafters-io/redis-starter-go/internal/utils"
 )
+
+func (c *ConfigCommand) handleGet(
+	ctx context.Context,
+	conn io.Writer,
+	config interfaces.IConfig,
+	args []string,
+) {
+	commands := map[string]CommandHandler{
+		"dir":        c.handleGetDir,
+		"dbfilename": c.handleGetDbFile,
+	}
+
+	if handler, exists := commands[args[2]]; exists {
+		handler(ctx, conn, config, args)
+	}
+}
+
+func (c *ConfigCommand) handleGetDir(
+	ctx context.Context,
+	conn io.Writer,
+	config interfaces.IConfig,
+	args []string,
+) {
+	dir := fmt.Sprintf(
+		"*2\r\n$3\r\ndir\r\n$%d\r\n%s\r\n",
+		len(config.GetRedisDir()),
+		config.GetRedisDir(),
+	)
+	conn.Write([]byte(dir))
+}
+
+func (c *ConfigCommand) handleGetDbFile(
+	ctx context.Context,
+	conn io.Writer,
+	config interfaces.IConfig,
+	args []string,
+) {
+	dir := fmt.Sprintf(
+		"*2\r\n$9\r\ndbfilename\r\n$%d\r\n%s\r\n",
+		len(config.GetRedisDbFileName()),
+		config.GetRedisDbFileName(),
+	)
+	conn.Write([]byte(dir))
+}
+
+func (c *KeysCommand) handleAll(
+	ctx context.Context,
+	conn io.Writer,
+	config interfaces.IConfig,
+	args []string,
+) {
+	fileContent := redis.ReadFile(config.GetRedisDir() + "/" + config.GetRedisDbFileName())
+	conn.Write([]byte(fmt.Sprintf("*1\r\n$%d\r\n%s\r\n", len(fileContent), fileContent)))
+}
 
 func (c *ReplConfCommand) handleMaster(
 	ctx context.Context,
